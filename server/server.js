@@ -19,7 +19,7 @@ const cors       = require("cors");
 // ── Config ─────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.PORT || "3001", 10);
 const COURT_IDS = (process.env.COURTS || "A,B,C").split(",").map(s => s.trim()).filter(Boolean);
-const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+const allowedOrigins = (process.env.CORS_ORIGIN || "https://3x3basketballbangmod.vercel.app")
   .split(",").map(s => s.trim());
 
 // กติกา 3x3 FIBA
