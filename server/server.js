@@ -33,8 +33,9 @@ const MAX_TO       = 1;
 const app    = express();
 const server = http.createServer(app);
 const corsOpts = {
-  origin: (origin, cb) => (!origin || allowedOrigins.includes(origin)) ? cb(null, true) : cb(new Error("CORS blocked")),
+  origin: true, // อนุญาตทุก origin ที่ส่งคำขอมา (ยืดหยุ่นที่สุดสำหรับ Socket.io)
   methods: ["GET", "POST"],
+  credentials: true
 };
 app.use(cors(corsOpts));
 const io = new Server(server, { cors: corsOpts, pingTimeout: 20000, pingInterval: 10000 });
