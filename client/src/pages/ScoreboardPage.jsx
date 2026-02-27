@@ -9,7 +9,7 @@ import { socket } from "../socket.js";
 import { DIVISIONS, COURTS, RULES } from "../constants.js";
 import TournamentBridge from "../components/scoreboard/TournamentBridge.jsx";
 
-const audioCtx = typeof window !== "undefined" ? { horn: new Audio("/horn.mp3"), buzzer: new Audio("/buzzer.mp3") } : null;
+const audioCtx = typeof window !== "undefined" ? { horn: new Audio("/buzzer.mp3"), buzzer: new Audio("/buzzer.mp3") } : null;
 let unlocked = false;
 const unlock = () => {
   if(unlocked||!audioCtx) return; unlocked=true;
