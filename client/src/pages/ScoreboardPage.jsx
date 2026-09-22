@@ -24,7 +24,7 @@ function fmtS(t){const s=Math.max(0,t);if(s>120)return String(Math.ceil(s/10));r
 
 const COLORS=["#FF6B35","#FF3333","#FF1493","#9B59B6","#3498DB","#00D4FF","#00E87A","#FFD700","#FFFFFF","#FF8C00"];
 
-function FoulDots({count,color,theme}){
+function FoulDots({count,theme}){
   const max=RULES.BONUS_FOULS;
   const D=(dim,bright)=>theme.highContrast?bright:dim;
   return(
@@ -32,9 +32,9 @@ function FoulDots({count,color,theme}){
       {Array.from({length:max}).map((_,i)=>{
         const on=i<count, hot=on&&count>=max;
         return <div key={i} style={{width:13,height:13,borderRadius:"50%",
-          background:on?(hot?"#FF3333":color):D("rgba(255,255,255,0.07)","rgba(255,255,255,0.35)"),
-          border:`1.5px solid ${on?(hot?"#FF3333":color):D("rgba(255,255,255,0.1)","rgba(255,255,255,0.45)")}`,
-          boxShadow:on?`0 0 5px ${hot?"#FF333388":color+"66"}`:"none",transition:"all .2s"}}/>;
+          background:on?(hot?"#FF3333":D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")):D("rgba(255,255,255,0.07)","rgba(255,255,255,0.35)"),
+          border:`1.5px solid ${on?(hot?"#FF3333":D("rgba(255,255,255,0.6)","rgba(255,255,255,0.9)")):D("rgba(255,255,255,0.1)","rgba(255,255,255,0.45)")}`,
+          transition:"all .2s"}}/>;
       })}
     </div>
   );
@@ -100,12 +100,12 @@ function TeamCard({team,tKey,send,theme}){
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5,padding:"0 12px 10px"}}>
         {[1,2].map(v=>(
           <button key={v} onClick={()=>send("score",tKey,v)}
-            style={{...F,fontSize:20,background:theme.highContrast?`${color}28`:`${color}14`,border:`1px solid ${theme.highContrast?color+"70":color+"33"}`,
-              color,padding:"10px 0",borderRadius:9,cursor:"pointer"}}>+{v}</button>
+            style={{...F,fontSize:20,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
+              color:D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),padding:"10px 0",borderRadius:9,cursor:"pointer"}}>+{v}</button>
         ))}
         <button onClick={()=>send("score",tKey,-1)}
-          style={{...F,fontSize:20,background:theme.highContrast?"rgba(255,50,50,0.25)":"rgba(255,50,50,0.12)",border:`1px solid ${theme.highContrast?"rgba(255,50,50,0.6)":"rgba(255,50,50,0.3)"}`,
-            color:"#FF5555",padding:"10px 0",borderRadius:9,cursor:"pointer"}}>-1</button>
+          style={{...F,fontSize:20,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
+            color:D("rgba(255,120,120,0.75)","rgba(255,120,120,0.95)"),padding:"10px 0",borderRadius:9,cursor:"pointer"}}>-1</button>
       </div>
       <div style={{height:1,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.2)"),margin:"0 12px"}}/>
       {/* Fouls */}
@@ -116,11 +116,11 @@ function TeamCard({team,tKey,send,theme}){
             <span style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.8)")}}>TEAM FOULS</span>
             <span style={{...F,fontSize:24,fontWeight:900,color:teamFouls>=RULES.BONUS_FOULS?"#FF3333":D("rgba(255,255,255,0.7)","rgba(255,255,255,0.95)")}}>{teamFouls}</span>
           </div>
-          <FoulDots count={teamFouls} color={color} theme={theme}/>
+          <FoulDots count={teamFouls} theme={theme}/>
           <div style={{display:"flex",gap:5,marginTop:6}}>
             <button onClick={()=>send("teamFoul",tKey,1)}
-              style={{flex:1,...F,fontSize:11,background:theme.highContrast?"rgba(255,50,50,0.2)":"rgba(255,50,50,0.08)",
-                border:`1px solid ${theme.highContrast?"rgba(255,50,50,0.5)":"rgba(255,50,50,0.2)"}`,color:"#FF9090",padding:"5px 0",borderRadius:6,cursor:"pointer"}}>+ FOUL</button>
+              style={{flex:1,...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.14)"),
+                border:`1px solid ${D("rgba(255,255,255,0.08)","rgba(255,255,255,0.3)")}`,color:D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"),padding:"5px 0",borderRadius:6,cursor:"pointer"}}>+ FOUL</button>
             <button onClick={()=>send("teamFoul",tKey,-1)} disabled={teamFouls<=0}
               style={{...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
                 border:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.7)"),
@@ -139,21 +139,20 @@ function TeamCard({team,tKey,send,theme}){
               <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.8)")}}>TIMEOUT</div>
               <div style={{fontSize:7,color:D("rgba(255,255,255,0.12)","rgba(255,255,255,0.55)")}}>3x3: 1 ครั้ง/เกม</div>
             </div>
-            <span style={{...F,fontSize:24,fontWeight:900,color:timeouts>0?color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.6)")}}>{timeouts}</span>
+            <span style={{...F,fontSize:24,fontWeight:900,color:timeouts>0?D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"):D("rgba(255,255,255,0.2)","rgba(255,255,255,0.6)")}}>{timeouts}</span>
           </div>
           <div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:6}}>
             {Array.from({length:RULES.MAX_TIMEOUTS}).map((_,i)=>(
               <div key={i} style={{width:12,height:12,borderRadius:"50%",
-                background:i<timeouts?color:D("rgba(255,255,255,0.06)","rgba(255,255,255,0.3)"),
-                border:`1.5px solid ${i<timeouts?color:D("rgba(255,255,255,0.1)","rgba(255,255,255,0.4)")}`,
-                boxShadow:i<timeouts?`0 0 5px ${color}77`:"none"}}/>
+                background:i<timeouts?D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"):D("rgba(255,255,255,0.06)","rgba(255,255,255,0.3)"),
+                border:`1.5px solid ${i<timeouts?D("rgba(255,255,255,0.8)","rgba(255,255,255,1)"):D("rgba(255,255,255,0.1)","rgba(255,255,255,0.4)")}`}}/>
             ))}
           </div>
           <div style={{display:"flex",gap:5}}>
             <button onClick={()=>{send("timeout",tKey,-1);playHorn();}}
               disabled={timeouts<=0}
-              style={{flex:1,...F,fontSize:11,background:theme.highContrast?`${color}25`:`${color}10`,border:`1px solid ${theme.highContrast?color+"60":color+"30"}`,
-                color,padding:"5px 0",borderRadius:6,cursor:"pointer",opacity:timeouts<=0?.3:1}}>USE T.O.</button>
+              style={{flex:1,...F,fontSize:11,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
+                color:D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),padding:"5px 0",borderRadius:6,cursor:"pointer",opacity:timeouts<=0?.3:1}}>USE T.O.</button>
             <button onClick={()=>send("timeout",tKey,1)} disabled={timeouts>=RULES.MAX_TIMEOUTS}
               style={{...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
                 border:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,color:D("rgba(255,255,255,0.3)","rgba(255,255,255,0.75)"),
@@ -169,10 +168,18 @@ function CenterPanel({state,send,onHorn,theme}){
   const {clockTenths,isRunning,shotClockTenths,shotRunning,possession,jumpBall,gameOver,winner,isOvertime,teamA,teamB}=state;
   const D=(dim,bright)=>theme.highContrast?bright:dim;
   const shotSec=shotClockTenths/10, shotUrg=shotSec<=3&&shotClockTenths>0, shotWarn=shotSec<=5&&shotClockTenths>0;
-  const shotColor=shotUrg?"#FF3333":shotWarn?"#FFA500":"#00E87A";
+  const shotColor=shotUrg?"#FF3333":shotWarn?"#FFA500":D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)");
   const gameEnd=clockTenths===0;
   const F={fontFamily:"'Bebas Neue',Impact,sans-serif"};
   const Btn=(s={})=>({...F,border:"none",cursor:"pointer",borderRadius:9,transition:"all .12s",...s});
+  const neutralBtn=D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)");
+  const neutralBorder=D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)");
+  const neutralText=D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)");
+  const StatusDot=({on})=>(
+    <span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",marginRight:8,
+      background:on?"#00E87A":D("rgba(255,255,255,0.2)","rgba(255,255,255,0.5)"),
+      boxShadow:on?"0 0 6px #00E87A":"none",verticalAlign:"middle"}}/>
+  );
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -213,26 +220,22 @@ function CenterPanel({state,send,onHorn,theme}){
         </div>
         <button onClick={()=>send("shotClockToggle")}
           style={Btn({width:"100%",padding:"9px 0",fontSize:15,letterSpacing:"0.1em",marginBottom:5,
-            background:shotRunning?(theme.highContrast?"rgba(255,55,55,0.3)":"rgba(255,55,55,0.14)"):(theme.highContrast?"rgba(0,232,122,0.22)":"rgba(0,232,122,0.09)"),
-            border:shotRunning?"1.5px solid rgba(255,55,55,0.4)":"1.5px solid rgba(0,232,122,0.3)",
-            color:shotRunning?"#FF5555":"#00E87A"})}>
-          {shotRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[C]</span>
+            background:neutralBtn,border:`1.5px solid ${neutralBorder}`,color:neutralText})}>
+          <StatusDot on={shotRunning}/>{shotRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[C]</span>
         </button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:5}}>
           <button onClick={()=>send("shotClockSet",null,12)}
-            style={Btn({padding:"10px 0",fontSize:30,color:"#FFD700",background:theme.highContrast?"rgba(255,215,0,0.22)":"rgba(255,215,0,0.09)",border:"1.5px solid rgba(255,215,0,0.35)"})}
+            style={Btn({padding:"10px 0",fontSize:30,color:neutralText,background:neutralBtn,border:`1.5px solid ${neutralBorder}`})}
           >12 <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[Z]</span></button>
           <button onClick={()=>send("shotClockSet",null,8)}
-            style={Btn({padding:"10px 0",fontSize:30,color:"#FFA500",background:theme.highContrast?"rgba(255,165,0,0.22)":"rgba(255,165,0,0.09)",border:"1.5px solid rgba(255,165,0,0.35)"})}
+            style={Btn({padding:"10px 0",fontSize:30,color:neutralText,background:neutralBtn,border:`1.5px solid ${neutralBorder}`})}
           >8 <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[X]</span></button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
           {[{l:"+1s",v:10},{l:"-1s",v:-10}].map(b=>(
             <button key={b.l} onClick={()=>send("shotClockAdjust",null,b.v)}
-              style={Btn({padding:"4px 0",fontSize:10,
-                background:b.v>0?(theme.highContrast?"rgba(0,232,122,0.15)":"rgba(0,232,122,0.05)"):(theme.highContrast?"rgba(255,55,55,0.15)":"rgba(255,55,55,0.05)"),
-                border:b.v>0?"1px solid rgba(0,232,122,0.12)":"1px solid rgba(255,55,55,0.12)",
-                color:b.v>0?D("rgba(0,232,122,0.6)","rgba(0,232,122,0.95)"):D("rgba(255,100,100,0.55)","rgba(255,100,100,0.95)")})}>{b.l}</button>
+              style={Btn({padding:"4px 0",fontSize:10,background:neutralBtn,border:`1px solid ${neutralBorder}`,
+                color:D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")})}>{b.l}</button>
           ))}
         </div>
       </div>
@@ -251,11 +254,9 @@ function CenterPanel({state,send,onHorn,theme}){
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:5}}>
           <button onClick={()=>send("clockToggle")} disabled={gameOver}
-            style={Btn({padding:"9px 0",fontSize:14,
-              background:isRunning?(theme.highContrast?"rgba(255,55,55,0.3)":"rgba(255,55,55,0.14)"):(theme.highContrast?"rgba(0,232,122,0.22)":"rgba(0,232,122,0.09)"),
-              border:isRunning?"1.5px solid rgba(255,55,55,0.4)":"1.5px solid rgba(0,232,122,0.3)",
-              color:isRunning?"#FF5555":"#00E87A",opacity:gameOver?.3:1})}>
-            {isRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[SPC]</span>
+            style={Btn({padding:"9px 0",fontSize:14,background:neutralBtn,
+              border:`1.5px solid ${neutralBorder}`,color:neutralText,opacity:gameOver?.3:1})}>
+            <StatusDot on={isRunning}/>{isRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[SPC]</span>
           </button>
           <button onClick={()=>send("clockReset")}
             style={Btn({padding:"9px 0",fontSize:14,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.14)"),
@@ -264,10 +265,8 @@ function CenterPanel({state,send,onHorn,theme}){
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
           {[{l:"+1m",v:600},{l:"+10s",v:100},{l:"+1s",v:10},{l:"-1s",v:-10},{l:"-10s",v:-100},{l:"-1m",v:-600}].map(b=>(
             <button key={b.l} onClick={()=>send("clockAdjust",null,b.v)}
-              style={Btn({padding:"4px 0",fontSize:9,
-                background:b.v>0?(theme.highContrast?"rgba(0,232,122,0.15)":"rgba(0,232,122,0.05)"):(theme.highContrast?"rgba(255,55,55,0.15)":"rgba(255,55,55,0.05)"),
-                border:b.v>0?"1px solid rgba(0,232,122,0.12)":"1px solid rgba(255,55,55,0.12)",
-                color:b.v>0?D("rgba(0,232,122,0.6)","rgba(0,232,122,0.95)"):D("rgba(255,100,100,0.55)","rgba(255,100,100,0.95)")})}>{b.l}</button>
+              style={Btn({padding:"4px 0",fontSize:9,background:neutralBtn,border:`1px solid ${neutralBorder}`,
+                color:D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")})}>{b.l}</button>
           ))}
         </div>
       </div>
