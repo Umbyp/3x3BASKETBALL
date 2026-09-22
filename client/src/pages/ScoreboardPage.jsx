@@ -1,13 +1,15 @@
 /**
  * 🎮 ScoreboardPage — Operator control
  * /scoreboard?court=A&division=open
- * Keyboard: SPACE=clock, C=shot, Z=12s, X=8s, H=horn
+ * Keyboard: SPACE=clock, C=shot, Z=12s, X=8s, H=horn, D=day mode
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { socket } from "../socket.js";
 import { DIVISIONS, COURTS, RULES } from "../constants.js";
 import TournamentBridge from "../components/scoreboard/TournamentBridge.jsx";
+
+const DAYMODE_KEY = "b3x3_daymode";
 
 const audioCtx = typeof window !== "undefined" ? { horn: new Audio("/buzzer.mp3"), buzzer: new Audio("/buzzer.mp3") } : null;
 let unlocked = false;
@@ -23,15 +25,16 @@ function fmtS(t){const s=Math.max(0,t);if(s>120)return String(Math.ceil(s/10));r
 
 const COLORS=["#FF6B35","#FF3333","#FF1493","#9B59B6","#3498DB","#00D4FF","#00E87A","#FFD700","#FFFFFF","#FF8C00"];
 
-function FoulDots({count,color}){
-  const max=RULES.BONUS_F;
+function FoulDots({count,color,dayMode}){
+  const max=RULES.BONUS_FOULS;
+  const D=(dim,bright)=>dayMode?bright:dim;
   return(
     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
       {Array.from({length:max}).map((_,i)=>{
         const on=i<count, hot=on&&count>=max;
         return <div key={i} style={{width:13,height:13,borderRadius:"50%",
-          background:on?(hot?"#FF3333":color):"rgba(255,255,255,0.07)",
-          border:`1.5px solid ${on?(hot?"#FF3333":color):"rgba(255,255,255,0.1)"}`,
+          background:on?(hot?"#FF3333":color):D("rgba(255,255,255,0.07)","rgba(255,255,255,0.35)"),
+          border:`1.5px solid ${on?(hot?"#FF3333":color):D("rgba(255,255,255,0.1)","rgba(255,255,255,0.45)")}`,
           boxShadow:on?`0 0 5px ${hot?"#FF333388":color+"66"}`:"none",transition:"all .2s"}}/>;
       })}
     </div>
@@ -60,15 +63,16 @@ function ColorPicker({teamKey,color,send}){
   );
 }
 
-function TeamCard({team,tKey,send}){
+function TeamCard({team,tKey,send,dayMode}){
   const [editing,setEditing]=useState(false);
   const [input,setInput]=useState(team.name);
   const {color,score,teamFouls,timeouts,name}=team;
+  const D=(dim,bright)=>dayMode?bright:dim;
   const save=()=>{send("teamName",tKey,input.toUpperCase());setEditing(false);};
   const F={fontFamily:"'Bebas Neue',Impact,sans-serif"};
   const nl=name.length, ns=nl<=8?26:nl<=13?19:nl<=18?15:11;
   return(
-    <div style={{background:"linear-gradient(160deg,#0d0d1b,#080810)",border:`1px solid ${color}22`,
+    <div style={{background:dayMode?"#000":"linear-gradient(160deg,#0d0d1b,#080810)",border:`1px solid ${dayMode?color+"66":color+"22"}`,
       borderRadius:18,overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div style={{height:3,background:`linear-gradient(90deg,transparent,${color},transparent)`}}/>
       {/* Header */}
@@ -83,77 +87,78 @@ function TeamCard({team,tKey,send}){
           :<span onClick={()=>setEditing(true)} style={{color,cursor:"pointer",flex:1,
               wordBreak:"break-word",lineHeight:1.1,...F,fontSize:ns}}>{name}</span>
         }
-        {teamFouls>=RULES.BONUS_F&&<span style={{padding:"1px 6px",borderRadius:5,fontSize:9,
+        {teamFouls>=RULES.BONUS_FOULS&&<span style={{padding:"1px 6px",borderRadius:5,fontSize:9,
           fontWeight:"bold",background:"rgba(255,0,0,0.15)",border:"1px solid rgba(255,0,0,0.35)",
           color:"#FF6666",letterSpacing:"0.05em"}}>BONUS</span>}
       </div>
       {/* Score */}
       <div style={{textAlign:"center",padding:"4px 0"}}>
         <div style={{...F,fontSize:110,fontWeight:900,lineHeight:.85,color,
-          textShadow:`0 0 50px ${color}44`}}>{score}</div>
+          textShadow:dayMode?"none":`0 0 50px ${color}44`,
+          WebkitTextStroke:dayMode?"1.5px rgba(0,0,0,0.6)":"0px transparent"}}>{score}</div>
       </div>
-      {/* Score buttons */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,padding:"0 12px 10px"}}>
-        {[1,2,3].map(v=>(
+      {/* Score buttons — FIBA 3x3: 1 pt (inside arc), 2 pt (beyond arc), no 3-pointer */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5,padding:"0 12px 10px"}}>
+        {[1,2].map(v=>(
           <button key={v} onClick={()=>send("score",tKey,v)}
-            style={{...F,fontSize:20,background:`${color}14`,border:`1px solid ${color}33`,
+            style={{...F,fontSize:20,background:dayMode?`${color}28`:`${color}14`,border:`1px solid ${dayMode?color+"70":color+"33"}`,
               color,padding:"10px 0",borderRadius:9,cursor:"pointer"}}>+{v}</button>
         ))}
         <button onClick={()=>send("score",tKey,-1)}
-          style={{...F,fontSize:20,background:"rgba(255,50,50,0.12)",border:"1px solid rgba(255,50,50,0.3)",
+          style={{...F,fontSize:20,background:dayMode?"rgba(255,50,50,0.25)":"rgba(255,50,50,0.12)",border:`1px solid ${dayMode?"rgba(255,50,50,0.6)":"rgba(255,50,50,0.3)"}`,
             color:"#FF5555",padding:"10px 0",borderRadius:9,cursor:"pointer"}}>-1</button>
       </div>
-      <div style={{height:1,background:"rgba(255,255,255,0.05)",margin:"0 12px"}}/>
+      <div style={{height:1,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.2)"),margin:"0 12px"}}/>
       {/* Fouls */}
       <div style={{padding:"10px 12px 8px",display:"flex",flexDirection:"column",gap:8}}>
-        <div style={{background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"9px 10px",
-          border:`1px solid ${teamFouls>=RULES.BONUS_F?"rgba(255,40,40,0.3)":"rgba(255,255,255,0.05)"}`}}>
+        <div style={{background:dayMode?"rgba(0,0,0,0.5)":"rgba(0,0,0,0.2)",borderRadius:10,padding:"9px 10px",
+          border:`1px solid ${teamFouls>=RULES.BONUS_FOULS?"rgba(255,40,40,0.3)":D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{...F,fontSize:8,letterSpacing:"0.4em",color:"rgba(255,255,255,0.25)"}}>TEAM FOULS</span>
-            <span style={{...F,fontSize:24,fontWeight:900,color:teamFouls>=RULES.BONUS_F?"#FF3333":"rgba(255,255,255,0.7)"}}>{teamFouls}</span>
+            <span style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.8)")}}>TEAM FOULS</span>
+            <span style={{...F,fontSize:24,fontWeight:900,color:teamFouls>=RULES.BONUS_FOULS?"#FF3333":D("rgba(255,255,255,0.7)","rgba(255,255,255,0.95)")}}>{teamFouls}</span>
           </div>
-          <FoulDots count={teamFouls} color={color}/>
+          <FoulDots count={teamFouls} color={color} dayMode={dayMode}/>
           <div style={{display:"flex",gap:5,marginTop:6}}>
             <button onClick={()=>send("teamFoul",tKey,1)}
-              style={{flex:1,...F,fontSize:11,background:"rgba(255,50,50,0.08)",
-                border:"1px solid rgba(255,50,50,0.2)",color:"#FF9090",padding:"5px 0",borderRadius:6,cursor:"pointer"}}>+ FOUL</button>
+              style={{flex:1,...F,fontSize:11,background:dayMode?"rgba(255,50,50,0.2)":"rgba(255,50,50,0.08)",
+                border:`1px solid ${dayMode?"rgba(255,50,50,0.5)":"rgba(255,50,50,0.2)"}`,color:"#FF9090",padding:"5px 0",borderRadius:6,cursor:"pointer"}}>+ FOUL</button>
             <button onClick={()=>send("teamFoul",tKey,-1)} disabled={teamFouls<=0}
-              style={{...F,fontSize:11,background:"rgba(255,255,255,0.04)",
-                border:"1px solid rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.25)",
+              style={{...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
+                border:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.7)"),
                 padding:"5px 8px",borderRadius:6,cursor:"pointer",opacity:teamFouls<=0?.3:1}}>-1</button>
             <button onClick={()=>send("teamFoulReset",tKey)}
-              style={{...F,fontSize:11,background:"rgba(255,255,255,0.04)",
-                border:"1px solid rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.2)",
+              style={{...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
+                border:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.65)"),
                 padding:"5px 8px",borderRadius:6,cursor:"pointer"}}>CLR</button>
           </div>
         </div>
         {/* Timeout */}
-        <div style={{background:"rgba(0,0,0,0.2)",borderRadius:10,padding:"9px 10px",
-          border:"1px solid rgba(255,255,255,0.05)",marginBottom:12}}>
+        <div style={{background:dayMode?"rgba(0,0,0,0.5)":"rgba(0,0,0,0.2)",borderRadius:10,padding:"9px 10px",
+          border:`1px solid ${D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`,marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
             <div>
-              <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:"rgba(255,255,255,0.25)"}}>TIMEOUT</div>
-              <div style={{fontSize:7,color:"rgba(255,255,255,0.12)"}}>3x3: 1 ครั้ง/เกม</div>
+              <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.8)")}}>TIMEOUT</div>
+              <div style={{fontSize:7,color:D("rgba(255,255,255,0.12)","rgba(255,255,255,0.55)")}}>3x3: 1 ครั้ง/เกม</div>
             </div>
-            <span style={{...F,fontSize:24,fontWeight:900,color:timeouts>0?color:"rgba(255,255,255,0.2)"}}>{timeouts}</span>
+            <span style={{...F,fontSize:24,fontWeight:900,color:timeouts>0?color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.6)")}}>{timeouts}</span>
           </div>
           <div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:6}}>
-            {Array.from({length:RULES.MAX_TO}).map((_,i)=>(
+            {Array.from({length:RULES.MAX_TIMEOUTS}).map((_,i)=>(
               <div key={i} style={{width:12,height:12,borderRadius:"50%",
-                background:i<timeouts?color:"rgba(255,255,255,0.06)",
-                border:`1.5px solid ${i<timeouts?color:"rgba(255,255,255,0.1)"}`,
+                background:i<timeouts?color:D("rgba(255,255,255,0.06)","rgba(255,255,255,0.3)"),
+                border:`1.5px solid ${i<timeouts?color:D("rgba(255,255,255,0.1)","rgba(255,255,255,0.4)")}`,
                 boxShadow:i<timeouts?`0 0 5px ${color}77`:"none"}}/>
             ))}
           </div>
           <div style={{display:"flex",gap:5}}>
             <button onClick={()=>{send("timeout",tKey,-1);playHorn();}}
               disabled={timeouts<=0}
-              style={{flex:1,...F,fontSize:11,background:`${color}10`,border:`1px solid ${color}30`,
+              style={{flex:1,...F,fontSize:11,background:dayMode?`${color}25`:`${color}10`,border:`1px solid ${dayMode?color+"60":color+"30"}`,
                 color,padding:"5px 0",borderRadius:6,cursor:"pointer",opacity:timeouts<=0?.3:1}}>USE T.O.</button>
-            <button onClick={()=>send("timeout",tKey,1)} disabled={timeouts>=RULES.MAX_TO}
-              style={{...F,fontSize:11,background:"rgba(255,255,255,0.04)",
-                border:"1px solid rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.3)",
-                padding:"5px 8px",borderRadius:6,cursor:"pointer",opacity:timeouts>=RULES.MAX_TO?.3:1}}>+1</button>
+            <button onClick={()=>send("timeout",tKey,1)} disabled={timeouts>=RULES.MAX_TIMEOUTS}
+              style={{...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
+                border:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,color:D("rgba(255,255,255,0.3)","rgba(255,255,255,0.75)"),
+                padding:"5px 8px",borderRadius:6,cursor:"pointer",opacity:timeouts>=RULES.MAX_TIMEOUTS?.3:1}}>+1</button>
           </div>
         </div>
       </div>
@@ -161,8 +166,9 @@ function TeamCard({team,tKey,send}){
   );
 }
 
-function CenterPanel({state,send,onHorn}){
+function CenterPanel({state,send,onHorn,dayMode}){
   const {clockTenths,isRunning,shotClockTenths,shotRunning,possession,jumpBall,gameOver,winner,isOvertime,teamA,teamB}=state;
+  const D=(dim,bright)=>dayMode?bright:dim;
   const shotSec=shotClockTenths/10, shotUrg=shotSec<=3&&shotClockTenths>0, shotWarn=shotSec<=5&&shotClockTenths>0;
   const shotColor=shotUrg?"#FF3333":shotWarn?"#FFA500":"#00E87A";
   const gameEnd=clockTenths===0;
@@ -196,71 +202,73 @@ function CenterPanel({state,send,onHorn}){
       )}
 
       {/* Shot clock */}
-      <div style={{background:shotUrg?"linear-gradient(160deg,#1c0505,#0a0a14)":"rgba(0,0,0,0.3)",
-        border:`2px solid ${shotUrg?"rgba(255,40,40,0.5)":shotWarn?"rgba(255,165,0,0.35)":"rgba(255,255,255,0.07)"}`,
+      <div style={{background:shotUrg?"linear-gradient(160deg,#1c0505,#0a0a14)":(dayMode?"rgba(0,0,0,0.6)":"rgba(0,0,0,0.3)"),
+        border:`2px solid ${shotUrg?"rgba(255,40,40,0.5)":shotWarn?"rgba(255,165,0,0.35)":D("rgba(255,255,255,0.07)","rgba(255,255,255,0.3)")}`,
         borderRadius:16,padding:"12px 12px 9px",boxShadow:shotUrg?"0 0 35px rgba(255,30,30,0.2)":"none",transition:"all .3s"}}>
-        <div style={{...F,fontSize:9,letterSpacing:"0.45em",color:"rgba(255,255,255,0.25)",textAlign:"center",marginBottom:2}}>SHOT CLOCK · 12s</div>
+        <div style={{...F,fontSize:9,letterSpacing:"0.45em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.85)"),textAlign:"center",marginBottom:2}}>SHOT CLOCK · 12s</div>
         <div style={{textAlign:"center",...F,fontSize:110,fontWeight:900,lineHeight:.85,color:shotColor,
-          textShadow:shotUrg?"0 0 45px rgba(255,30,30,0.9)":`0 0 25px ${shotColor}44`}}>{fmtS(shotClockTenths)}</div>
-        <div style={{height:2,background:"rgba(255,255,255,0.05)",borderRadius:2,overflow:"hidden",margin:"5px 0"}}>
+          textShadow:shotUrg?"0 0 45px rgba(255,30,30,0.9)":(dayMode?"none":`0 0 25px ${shotColor}44`),
+          WebkitTextStroke:dayMode?"1.5px rgba(0,0,0,0.6)":"0px transparent"}}>{fmtS(shotClockTenths)}</div>
+        <div style={{height:2,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)"),borderRadius:2,overflow:"hidden",margin:"5px 0"}}>
           <div style={{height:"100%",width:`${Math.min(100,(shotClockTenths/120)*100)}%`,background:shotColor,borderRadius:2,transition:"width .1s linear"}}/>
         </div>
         <button onClick={()=>send("shotClockToggle")}
           style={Btn({width:"100%",padding:"9px 0",fontSize:15,letterSpacing:"0.1em",marginBottom:5,
-            background:shotRunning?"rgba(255,55,55,0.14)":"rgba(0,232,122,0.09)",
+            background:shotRunning?(dayMode?"rgba(255,55,55,0.3)":"rgba(255,55,55,0.14)"):(dayMode?"rgba(0,232,122,0.22)":"rgba(0,232,122,0.09)"),
             border:shotRunning?"1.5px solid rgba(255,55,55,0.4)":"1.5px solid rgba(0,232,122,0.3)",
             color:shotRunning?"#FF5555":"#00E87A"})}>
-          {shotRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:.5}}>[C]</span>
+          {shotRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:dayMode?.85:.5}}>[C]</span>
         </button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:5}}>
           <button onClick={()=>send("shotClockSet",null,12)}
-            style={Btn({padding:"10px 0",fontSize:30,color:"#FFD700",background:"rgba(255,215,0,0.09)",border:"1.5px solid rgba(255,215,0,0.35)"})}
-          >12 <span style={{fontSize:8,opacity:.5}}>[Z]</span></button>
+            style={Btn({padding:"10px 0",fontSize:30,color:"#FFD700",background:dayMode?"rgba(255,215,0,0.22)":"rgba(255,215,0,0.09)",border:"1.5px solid rgba(255,215,0,0.35)"})}
+          >12 <span style={{fontSize:8,opacity:dayMode?.85:.5}}>[Z]</span></button>
           <button onClick={()=>send("shotClockSet",null,8)}
-            style={Btn({padding:"10px 0",fontSize:30,color:"#FFA500",background:"rgba(255,165,0,0.09)",border:"1.5px solid rgba(255,165,0,0.35)"})}
-          >8 <span style={{fontSize:8,opacity:.5}}>[X]</span></button>
+            style={Btn({padding:"10px 0",fontSize:30,color:"#FFA500",background:dayMode?"rgba(255,165,0,0.22)":"rgba(255,165,0,0.09)",border:"1.5px solid rgba(255,165,0,0.35)"})}
+          >8 <span style={{fontSize:8,opacity:dayMode?.85:.5}}>[X]</span></button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
           {[{l:"+1s",v:10},{l:"-1s",v:-10}].map(b=>(
             <button key={b.l} onClick={()=>send("shotClockAdjust",null,b.v)}
               style={Btn({padding:"4px 0",fontSize:10,
-                background:b.v>0?"rgba(0,232,122,0.05)":"rgba(255,55,55,0.05)",
+                background:b.v>0?(dayMode?"rgba(0,232,122,0.15)":"rgba(0,232,122,0.05)"):(dayMode?"rgba(255,55,55,0.15)":"rgba(255,55,55,0.05)"),
                 border:b.v>0?"1px solid rgba(0,232,122,0.12)":"1px solid rgba(255,55,55,0.12)",
-                color:b.v>0?"rgba(0,232,122,0.6)":"rgba(255,100,100,0.55)"})}>{b.l}</button>
+                color:b.v>0?D("rgba(0,232,122,0.6)","rgba(0,232,122,0.95)"):D("rgba(255,100,100,0.55)","rgba(255,100,100,0.95)")})}>{b.l}</button>
           ))}
         </div>
       </div>
 
       {/* Game clock */}
-      <div style={{background:gameEnd?"rgba(255,0,0,0.25)":"rgba(0,0,0,0.28)",
-        border:gameEnd?"2px solid #FF0000":"1px solid rgba(255,215,0,0.14)",
+      <div style={{background:gameEnd?"rgba(255,0,0,0.25)":(dayMode?"rgba(0,0,0,0.55)":"rgba(0,0,0,0.28)"),
+        border:gameEnd?"2px solid #FF0000":`1px solid ${D("rgba(255,215,0,0.14)","rgba(255,215,0,0.45)")}`,
         borderRadius:14,padding:"10px 11px",boxShadow:gameEnd?"0 0 45px rgba(255,0,0,0.35)":"none",transition:"all .3s"}}>
-        <div style={{...F,fontSize:8,letterSpacing:"0.45em",color:gameEnd?"#FF9999":"rgba(255,215,0,0.5)",textAlign:"center",marginBottom:3}}>GAME CLOCK · 10 MIN</div>
+        <div style={{...F,fontSize:8,letterSpacing:"0.45em",color:gameEnd?"#FF9999":D("rgba(255,215,0,0.5)","rgba(255,215,0,0.9)"),textAlign:"center",marginBottom:3}}>GAME CLOCK · 10 MIN</div>
         <div style={{textAlign:"center",...F,fontSize:clockTenths<=600?54:46,fontWeight:900,lineHeight:1,
-          color:gameEnd?"#FF0000":isRunning?"#FFD700":"rgba(255,255,255,0.85)",
-          textShadow:gameEnd?"0 0 35px #FF0000":isRunning?"0 0 28px rgba(255,215,0,0.55)":"none",transition:"all .2s"}}>{fmt(clockTenths)}</div>
-        <div style={{...F,fontSize:10,letterSpacing:"0.3em",color:isRunning?"rgba(255,215,0,0.55)":"rgba(255,255,255,0.18)",textAlign:"center",marginBottom:5}}>
+          color:gameEnd?"#FF0000":isRunning?"#FFD700":D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),
+          textShadow:gameEnd?"0 0 35px #FF0000":isRunning?"0 0 28px rgba(255,215,0,0.55)":"none",
+          WebkitTextStroke:dayMode?"1.5px rgba(0,0,0,0.5)":"0px transparent",transition:"all .2s"}}>{fmt(clockTenths)}</div>
+        <div style={{...F,fontSize:10,letterSpacing:"0.3em",color:isRunning?D("rgba(255,215,0,0.55)","rgba(255,215,0,0.9)"):D("rgba(255,255,255,0.18)","rgba(255,255,255,0.7)"),textAlign:"center",marginBottom:5}}>
           {gameOver?"■ GAME OVER":isRunning?"▶ LIVE":"■ PAUSED"}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:5}}>
           <button onClick={()=>send("clockToggle")} disabled={gameOver}
             style={Btn({padding:"9px 0",fontSize:14,
-              background:isRunning?"rgba(255,55,55,0.14)":"rgba(0,232,122,0.09)",
+              background:isRunning?(dayMode?"rgba(255,55,55,0.3)":"rgba(255,55,55,0.14)"):(dayMode?"rgba(0,232,122,0.22)":"rgba(0,232,122,0.09)"),
               border:isRunning?"1.5px solid rgba(255,55,55,0.4)":"1.5px solid rgba(0,232,122,0.3)",
               color:isRunning?"#FF5555":"#00E87A",opacity:gameOver?.3:1})}>
-            {isRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:.5}}>[SPC]</span>
+            {isRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:dayMode?.85:.5}}>[SPC]</span>
           </button>
           <button onClick={()=>send("clockReset")}
-            style={Btn({padding:"9px 0",fontSize:14,background:"rgba(255,255,255,0.04)",
-              border:"1px solid rgba(255,255,255,0.09)",color:"rgba(255,255,255,0.38)"})}>↺ RESET</button>
+            style={Btn({padding:"9px 0",fontSize:14,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.14)"),
+              border:`1px solid ${D("rgba(255,255,255,0.09)","rgba(255,255,255,0.3)")}`,color:D("rgba(255,255,255,0.38)","rgba(255,255,255,0.85)")})}>↺ RESET</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
           {[{l:"+1m",v:600},{l:"+10s",v:100},{l:"+1s",v:10},{l:"-1s",v:-10},{l:"-10s",v:-100},{l:"-1m",v:-600}].map(b=>(
             <button key={b.l} onClick={()=>send("clockAdjust",null,b.v)}
               style={Btn({padding:"4px 0",fontSize:9,
-                background:b.v>0?"rgba(0,232,122,0.05)":"rgba(255,55,55,0.05)",
+                background:b.v>0?(dayMode?"rgba(0,232,122,0.15)":"rgba(0,232,122,0.05)"):(dayMode?"rgba(255,55,55,0.15)":"rgba(255,55,55,0.05)"),
                 border:b.v>0?"1px solid rgba(0,232,122,0.12)":"1px solid rgba(255,55,55,0.12)",
-                color:b.v>0?"rgba(0,232,122,0.6)":"rgba(255,100,100,0.55)"})}>{b.l}</button>
+                color:b.v>0?D("rgba(0,232,122,0.6)","rgba(0,232,122,0.95)"):D("rgba(255,100,100,0.55)","rgba(255,100,100,0.95)")})}>{b.l}</button>
           ))}
         </div>
       </div>
@@ -268,13 +276,13 @@ function CenterPanel({state,send,onHorn}){
       {/* Horn */}
       <button onClick={onHorn}
         style={Btn({width:"100%",padding:"11px 0",fontSize:17,letterSpacing:"0.1em",
-          background:"rgba(255,165,0,0.13)",border:"2px solid rgba(255,165,0,0.45)",color:"#FFA500"})}>
-        📢 SOUND HORN <span style={{fontSize:8,opacity:.5}}>[H]</span>
+          background:dayMode?"rgba(255,165,0,0.28)":"rgba(255,165,0,0.13)",border:"2px solid rgba(255,165,0,0.45)",color:"#FFA500"})}>
+        📢 SOUND HORN <span style={{fontSize:8,opacity:dayMode?.85:.5}}>[H]</span>
       </button>
 
       {/* Possession */}
-      <div style={{background:"rgba(0,0,0,0.28)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:13,padding:"9px 11px"}}>
-        <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:"rgba(255,255,255,0.2)",marginBottom:5}}>POSSESSION</div>
+      <div style={{background:D("rgba(0,0,0,0.28)","rgba(0,0,0,0.6)"),border:`1px solid ${D("rgba(255,255,255,0.06)","rgba(255,255,255,0.25)")}`,borderRadius:13,padding:"9px 11px"}}>
+        <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.75)"),marginBottom:5}}>POSSESSION</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
           {[
             {label:"◀ HOME",value:"teamA",color:state.teamA.color,active:possession==="teamA"},
@@ -283,9 +291,9 @@ function CenterPanel({state,send,onHorn}){
           ].map(b=>(
             <button key={b.value} onClick={()=>b.value==="jump"?send("jumpBall"):send("possession",null,possession===b.value?null:b.value)}
               style={Btn({padding:"7px 0",fontSize:9,letterSpacing:"0.04em",
-                background:b.active?`${b.color}18`:"rgba(255,255,255,0.04)",
-                border:b.active?`1.5px solid ${b.color}55`:"1px solid rgba(255,255,255,0.07)",
-                color:b.active?b.color:"rgba(255,255,255,0.3)"})}>
+                background:b.active?`${b.color}18`:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
+                border:b.active?`1.5px solid ${b.color}55`:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,
+                color:b.active?b.color:D("rgba(255,255,255,0.3)","rgba(255,255,255,0.75)")})}>
               {b.label}
             </button>
           ))}
@@ -302,9 +310,16 @@ export default function ScoreboardPage(){
   const divConfig      = DIVISIONS.find(d=>d.id===divisionId)||DIVISIONS[0];
   const [state,setS]   = useState(null);
   const [conn,setConn] = useState(false);
+  const [dayMode,setDayMode] = useState(() => {
+    try { return localStorage.getItem(DAYMODE_KEY) === "1"; } catch { return false; }
+  });
   const prevGC = useRef(null), prevSC = useRef(null);
 
   const send = useCallback((type,team,value)=>socket.emit("action",{courtId,type,team,value}),[courtId]);
+
+  useEffect(()=>{
+    try { localStorage.setItem(DAYMODE_KEY, dayMode ? "1" : "0"); } catch {}
+  },[dayMode]);
 
   useEffect(()=>{
     socket.on("connect",()=>setConn(true));
@@ -331,6 +346,7 @@ export default function ScoreboardPage(){
       else if(e.key==="z"||e.key==="Z"){e.preventDefault();send("shotClockSet",null,12);}
       else if(e.key==="x"||e.key==="X"){e.preventDefault();send("shotClockSet",null,8);}
       else if(e.key==="h"||e.key==="H"){e.preventDefault();playHorn();}
+      else if(e.key==="d"||e.key==="D"){e.preventDefault();setDayMode(v=>!v);}
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
@@ -345,7 +361,7 @@ export default function ScoreboardPage(){
   );
 
   return(
-    <div onClick={unlock} style={{minHeight:"100vh",background:"radial-gradient(ellipse at 25% 0%,#13101e,#080810 55%)",padding:10}}>
+    <div onClick={unlock} style={{minHeight:"100vh",background:dayMode?"#000":"radial-gradient(ellipse at 25% 0%,#13101e,#080810 55%)",padding:10}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');button,select{font-family:'Bebas Neue',Impact,sans-serif;outline:none;}*{box-sizing:border-box;margin:0;padding:0;}`}</style>
 
       {/* Header */}
@@ -382,6 +398,15 @@ export default function ScoreboardPage(){
             style={{padding:"3px 9px",borderRadius:7,fontFamily:"'Bebas Neue',sans-serif",fontSize:10,
               background:"rgba(167,139,250,0.1)",border:"1px solid rgba(167,139,250,0.3)",
               color:"#A78BFA",textDecoration:"none"}}>📺 TV</a>
+          {/* Day mode toggle */}
+          <button onClick={()=>setDayMode(v=>!v)}
+            style={{padding:"3px 10px",borderRadius:100,cursor:"pointer",
+              background:dayMode?"rgba(255,215,0,0.18)":"rgba(255,255,255,0.05)",
+              border:`1px solid ${dayMode?"rgba(255,215,0,0.5)":"rgba(255,255,255,0.1)"}`,
+              color:dayMode?"#FFD700":"rgba(255,255,255,0.4)",
+              fontFamily:"'Bebas Neue',sans-serif",fontSize:10,letterSpacing:"0.1em"}}>
+            {dayMode?"☀ DAY [D]":"🌙 NIGHT [D]"}
+          </button>
           {/* Status */}
           <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:100,
             background:conn?"rgba(0,232,122,0.07)":"rgba(255,55,55,0.07)",
@@ -403,9 +428,9 @@ export default function ScoreboardPage(){
 
       {/* Main 3-column grid */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 270px 1fr",gap:9,maxWidth:1380,margin:"0 auto"}}>
-        <TeamCard team={state.teamA} tKey="teamA" send={send}/>
-        <CenterPanel state={state} send={send} onHorn={playHorn}/>
-        <TeamCard team={state.teamB} tKey="teamB" send={send}/>
+        <TeamCard team={state.teamA} tKey="teamA" send={send} dayMode={dayMode}/>
+        <CenterPanel state={state} send={send} onHorn={playHorn} dayMode={dayMode}/>
+        <TeamCard team={state.teamB} tKey="teamB" send={send} dayMode={dayMode}/>
       </div>
     </div>
   );
