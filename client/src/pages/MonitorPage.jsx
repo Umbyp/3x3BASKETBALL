@@ -32,7 +32,7 @@ function CourtCard({cid,s}){
           <div className="flex-1 text-center">
             <div style={{color:s.teamA.color}} className="font-bebas text-base tracking-wider">{s.teamA.name}</div>
             <div style={{color:s.teamA.color}} className="font-bebas text-5xl font-black leading-none">{s.teamA.score}</div>
-            {s.teamA.teamFouls>=RULES.BONUS_F&&<span className="text-[10px] text-red-400 font-bold">BONUS</span>}
+            {s.teamA.teamFouls>=RULES.BONUS_FOULS&&<span className="text-[10px] text-red-400 font-bold">BONUS</span>}
           </div>
           <div className="flex flex-col items-center gap-1 min-w-[80px]">
             <div className={`font-bebas text-xl ${s.clockTenths===0?"text-red-400":s.isRunning?"text-yellow-400":"text-white/60"}`}>{fmtClock(s.clockTenths)}</div>
@@ -47,13 +47,13 @@ function CourtCard({cid,s}){
           <div className="flex-1 text-center">
             <div style={{color:s.teamB.color}} className="font-bebas text-base tracking-wider">{s.teamB.name}</div>
             <div style={{color:s.teamB.color}} className="font-bebas text-5xl font-black leading-none">{s.teamB.score}</div>
-            {s.teamB.teamFouls>=RULES.BONUS_F&&<span className="text-[10px] text-red-400 font-bold">BONUS</span>}
+            {s.teamB.teamFouls>=RULES.BONUS_FOULS&&<span className="text-[10px] text-red-400 font-bold">BONUS</span>}
           </div>
         </div>
         <div className="flex justify-between text-[10px] text-gray-600 border-t border-gray-800 pt-1.5">
-          <span>F:<span className={s.teamA.teamFouls>=RULES.BONUS_F?"text-red-400 font-bold":"text-gray-400"}> {s.teamA.teamFouls}</span></span>
+          <span>F:<span className={s.teamA.teamFouls>=RULES.BONUS_FOULS?"text-red-400 font-bold":"text-gray-400"}> {s.teamA.teamFouls}</span></span>
           <span>TO: {s.teamA.timeouts} | {s.teamB.timeouts}</span>
-          <span>F:<span className={s.teamB.teamFouls>=RULES.BONUS_F?"text-red-400 font-bold":"text-gray-400"}> {s.teamB.teamFouls}</span></span>
+          <span>F:<span className={s.teamB.teamFouls>=RULES.BONUS_FOULS?"text-red-400 font-bold":"text-gray-400"}> {s.teamB.teamFouls}</span></span>
         </div>
       </div>
     </div>

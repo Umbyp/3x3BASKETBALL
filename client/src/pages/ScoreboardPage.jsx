@@ -26,7 +26,7 @@ function fmtS(t){const s=Math.max(0,t);if(s>120)return String(Math.ceil(s/10));r
 const COLORS=["#FF6B35","#FF3333","#FF1493","#9B59B6","#3498DB","#00D4FF","#00E87A","#FFD700","#FFFFFF","#FF8C00"];
 
 function FoulDots({count,color,dayMode}){
-  const max=RULES.BONUS_F;
+  const max=RULES.BONUS_FOULS;
   const D=(dim,bright)=>dayMode?bright:dim;
   return(
     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -87,7 +87,7 @@ function TeamCard({team,tKey,send,dayMode}){
           :<span onClick={()=>setEditing(true)} style={{color,cursor:"pointer",flex:1,
               wordBreak:"break-word",lineHeight:1.1,...F,fontSize:ns}}>{name}</span>
         }
-        {teamFouls>=RULES.BONUS_F&&<span style={{padding:"1px 6px",borderRadius:5,fontSize:9,
+        {teamFouls>=RULES.BONUS_FOULS&&<span style={{padding:"1px 6px",borderRadius:5,fontSize:9,
           fontWeight:"bold",background:"rgba(255,0,0,0.15)",border:"1px solid rgba(255,0,0,0.35)",
           color:"#FF6666",letterSpacing:"0.05em"}}>BONUS</span>}
       </div>
@@ -97,9 +97,9 @@ function TeamCard({team,tKey,send,dayMode}){
           textShadow:dayMode?"none":`0 0 50px ${color}44`,
           WebkitTextStroke:dayMode?"1.5px rgba(0,0,0,0.6)":"0px transparent"}}>{score}</div>
       </div>
-      {/* Score buttons */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,padding:"0 12px 10px"}}>
-        {[1,2,3].map(v=>(
+      {/* Score buttons — FIBA 3x3: 1 pt (inside arc), 2 pt (beyond arc), no 3-pointer */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5,padding:"0 12px 10px"}}>
+        {[1,2].map(v=>(
           <button key={v} onClick={()=>send("score",tKey,v)}
             style={{...F,fontSize:20,background:dayMode?`${color}28`:`${color}14`,border:`1px solid ${dayMode?color+"70":color+"33"}`,
               color,padding:"10px 0",borderRadius:9,cursor:"pointer"}}>+{v}</button>
@@ -112,10 +112,10 @@ function TeamCard({team,tKey,send,dayMode}){
       {/* Fouls */}
       <div style={{padding:"10px 12px 8px",display:"flex",flexDirection:"column",gap:8}}>
         <div style={{background:dayMode?"rgba(0,0,0,0.5)":"rgba(0,0,0,0.2)",borderRadius:10,padding:"9px 10px",
-          border:`1px solid ${teamFouls>=RULES.BONUS_F?"rgba(255,40,40,0.3)":D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`}}>
+          border:`1px solid ${teamFouls>=RULES.BONUS_FOULS?"rgba(255,40,40,0.3)":D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <span style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.8)")}}>TEAM FOULS</span>
-            <span style={{...F,fontSize:24,fontWeight:900,color:teamFouls>=RULES.BONUS_F?"#FF3333":D("rgba(255,255,255,0.7)","rgba(255,255,255,0.95)")}}>{teamFouls}</span>
+            <span style={{...F,fontSize:24,fontWeight:900,color:teamFouls>=RULES.BONUS_FOULS?"#FF3333":D("rgba(255,255,255,0.7)","rgba(255,255,255,0.95)")}}>{teamFouls}</span>
           </div>
           <FoulDots count={teamFouls} color={color} dayMode={dayMode}/>
           <div style={{display:"flex",gap:5,marginTop:6}}>
@@ -143,7 +143,7 @@ function TeamCard({team,tKey,send,dayMode}){
             <span style={{...F,fontSize:24,fontWeight:900,color:timeouts>0?color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.6)")}}>{timeouts}</span>
           </div>
           <div style={{display:"flex",gap:4,justifyContent:"center",marginBottom:6}}>
-            {Array.from({length:RULES.MAX_TO}).map((_,i)=>(
+            {Array.from({length:RULES.MAX_TIMEOUTS}).map((_,i)=>(
               <div key={i} style={{width:12,height:12,borderRadius:"50%",
                 background:i<timeouts?color:D("rgba(255,255,255,0.06)","rgba(255,255,255,0.3)"),
                 border:`1.5px solid ${i<timeouts?color:D("rgba(255,255,255,0.1)","rgba(255,255,255,0.4)")}`,
@@ -155,10 +155,10 @@ function TeamCard({team,tKey,send,dayMode}){
               disabled={timeouts<=0}
               style={{flex:1,...F,fontSize:11,background:dayMode?`${color}25`:`${color}10`,border:`1px solid ${dayMode?color+"60":color+"30"}`,
                 color,padding:"5px 0",borderRadius:6,cursor:"pointer",opacity:timeouts<=0?.3:1}}>USE T.O.</button>
-            <button onClick={()=>send("timeout",tKey,1)} disabled={timeouts>=RULES.MAX_TO}
+            <button onClick={()=>send("timeout",tKey,1)} disabled={timeouts>=RULES.MAX_TIMEOUTS}
               style={{...F,fontSize:11,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
                 border:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,color:D("rgba(255,255,255,0.3)","rgba(255,255,255,0.75)"),
-                padding:"5px 8px",borderRadius:6,cursor:"pointer",opacity:timeouts>=RULES.MAX_TO?.3:1}}>+1</button>
+                padding:"5px 8px",borderRadius:6,cursor:"pointer",opacity:timeouts>=RULES.MAX_TIMEOUTS?.3:1}}>+1</button>
           </div>
         </div>
       </div>
