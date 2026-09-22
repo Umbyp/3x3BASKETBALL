@@ -6,7 +6,7 @@
  * - ตัวเลขคะแนนขนาดใหญ่มาก
  * - Shot clock ใหญ่ชัดเจน
  * - ไม่มีปุ่ม operator
- * - ดูดีทั้งในห้องมืดและสว่าง
+ * - Day Mode [D]: เพิ่มคอนทราสต์สำหรับใช้กลางแจ้ง/แสงจ้า
  * - รองรับ landscape เต็มจอ
  */
 
@@ -14,6 +14,8 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { socket } from "../socket.js";
 import { COURTS, DIVISIONS } from "../constants.js";
+
+const DAYMODE_KEY = "b3x3_daymode";
 
 function fmtClock(tenths) {
   const t = Math.max(0, tenths);
@@ -30,14 +32,15 @@ function fmtShot(tenths) {
 }
 
 /* ─── Foul dots ────────────────────────────────────────────────────────────── */
-function FoulDots({ count, color, max = 6 }) {
+function FoulDots({ count, color, max = 6, dayMode }) {
+  const D = (dim, bright) => (dayMode ? bright : dim);
   return (
     <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
       {Array.from({ length: max }).map((_, i) => (
         <div key={i} style={{
           width: 18, height: 18, borderRadius:"50%",
-          background: i < count ? (count >= max ? "#FF3333" : color) : "rgba(255,255,255,0.08)",
-          border: `2px solid ${i < count ? (count >= max ? "#FF3333" : color) : "rgba(255,255,255,0.12)"}`,
+          background: i < count ? (count >= max ? "#FF3333" : color) : D("rgba(255,255,255,0.08)","rgba(255,255,255,0.35)"),
+          border: `2px solid ${i < count ? (count >= max ? "#FF3333" : color) : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.45)")}`,
           boxShadow: i < count ? `0 0 10px ${count >= max ? "#FF333388" : color+"66"}` : "none",
           transition: "all .25s",
         }} />
@@ -47,8 +50,9 @@ function FoulDots({ count, color, max = 6 }) {
 }
 
 /* ─── Team Panel ───────────────────────────────────────────────────────────── */
-function TeamPanel({ team, tKey, state, flip }) {
+function TeamPanel({ team, tKey, state, flip, dayMode }) {
   const { color, name, score, teamFouls, timeouts } = team;
+  const D = (dim, bright) => (dayMode ? bright : dim);
   const bonus   = teamFouls >= 6;
   const hasBall = state.possession === tKey;
   const nameLen = name.length;
@@ -73,7 +77,7 @@ function TeamPanel({ team, tKey, state, flip }) {
         justifyContent: "space-between",
         padding: flip ? "40px 50px 40px 60px" : "40px 60px 40px 50px",
         textAlign: flip ? "right" : "left",
-        background: `linear-gradient(${flip?"270deg":"90deg"}, rgba(0,0,0,0) 0%, ${color}09 100%)`,
+        background: dayMode ? "none" : `linear-gradient(${flip?"270deg":"90deg"}, rgba(0,0,0,0) 0%, ${color}09 100%)`,
       }}>
 
         {/* Name + ball indicator */}
@@ -94,7 +98,8 @@ function TeamPanel({ team, tKey, state, flip }) {
           <div style={{
             fontFamily:"'Bebas Neue',Impact,sans-serif",
             fontSize: nameSz, lineHeight: 1.05, color: "#FFF",
-            textShadow: `0 0 60px ${color}44`,
+            textShadow: dayMode ? "none" : `0 0 60px ${color}44`,
+            WebkitTextStroke: dayMode ? "1px rgba(0,0,0,0.5)" : "0px transparent",
             letterSpacing: "0.03em",
             wordBreak: "break-word",
           }}>{name}</div>
@@ -105,7 +110,8 @@ function TeamPanel({ team, tKey, state, flip }) {
           fontFamily:"'Bebas Neue',Impact,sans-serif",
           fontSize: 280, lineHeight: 0.82,
           color,
-          textShadow: `0 0 120px ${color}55, 0 0 40px ${color}33`,
+          textShadow: dayMode ? "none" : `0 0 120px ${color}55, 0 0 40px ${color}33`,
+          WebkitTextStroke: dayMode ? "2px rgba(0,0,0,0.6)" : "0px transparent",
           margin: "0 -10px",
         }}>{score}</div>
 
@@ -116,12 +122,12 @@ function TeamPanel({ team, tKey, state, flip }) {
           {/* Timeout pip */}
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18,
-              fontWeight:700, color:"rgba(255,255,255,0.4)", letterSpacing:"0.1em" }}>TO</span>
+              fontWeight:700, color: D("rgba(255,255,255,0.4)","rgba(255,255,255,0.9)"), letterSpacing:"0.1em" }}>TO</span>
             <div style={{ display:"flex", gap:6 }}>
               {Array.from({length:1}).map((_,i)=>(
                 <div key={i} style={{
                   width: 28, height: 10, borderRadius: 5,
-                  background: i < timeouts ? color : "rgba(255,255,255,0.12)",
+                  background: i < timeouts ? color : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.4)"),
                   boxShadow: i < timeouts ? `0 0 8px ${color}` : "none",
                 }} />
               ))}
@@ -132,13 +138,13 @@ function TeamPanel({ team, tKey, state, flip }) {
           <div>
             <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18,
               fontWeight:800, letterSpacing:"0.15em",
-              color: bonus ? "#FF4444" : "rgba(255,255,255,0.35)",
+              color: bonus ? "#FF4444" : D("rgba(255,255,255,0.35)","rgba(255,255,255,0.9)"),
               marginBottom: 8,
               textAlign: flip ? "right" : "left",
             }}>
               FOULS {teamFouls}/6 {bonus ? "— BONUS" : ""}
             </div>
-            <FoulDots count={teamFouls} color={color} />
+            <FoulDots count={teamFouls} color={color} dayMode={dayMode} />
           </div>
 
         </div>
@@ -148,16 +154,17 @@ function TeamPanel({ team, tKey, state, flip }) {
 }
 
 /* ─── Center column ────────────────────────────────────────────────────────── */
-function CenterCol({ state }) {
+function CenterCol({ state, dayMode }) {
   const { clockTenths, isRunning, shotClockTenths, shotRunning,
           gameOver, winner, isOvertime, jumpBall, teamA, teamB } = state;
+  const D = (dim, bright) => (dayMode ? bright : dim);
 
   const shotSec    = shotClockTenths / 10;
   const shotUrgent = shotSec <= 3 && shotClockTenths > 0;
   const shotWarn   = shotSec <= 5 && shotClockTenths > 0;
   const shotColor  = shotUrgent ? "#FF2222" : shotWarn ? "#FF8800" : "#00E87A";
   const gameOver0  = clockTenths === 0;
-  const clockColor = gameOver0 ? "#FF2222" : isRunning ? "#FFD700" : "rgba(255,255,255,0.75)";
+  const clockColor = gameOver0 ? "#FF2222" : isRunning ? "#FFD700" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)");
 
   const winTeam = winner === "teamA" ? teamA : winner === "teamB" ? teamB : null;
 
@@ -166,15 +173,15 @@ function CenterCol({ state }) {
       width: 380, flexShrink: 0,
       display:"flex", flexDirection:"column", alignItems:"center",
       justifyContent:"space-between", padding:"30px 0", gap:0,
-      background:"rgba(0,0,0,0.55)",
-      borderLeft:"1px solid rgba(255,255,255,0.05)",
-      borderRight:"1px solid rgba(255,255,255,0.05)",
+      background: dayMode ? "rgba(0,0,0,0.85)" : "rgba(0,0,0,0.55)",
+      borderLeft: `1px solid ${D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`,
+      borderRight: `1px solid ${D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`,
     }}>
 
       {/* TOP: 3x3 + OT badge */}
       <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, marginTop:8 }}>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:17, fontWeight:900,
-          letterSpacing:"0.35em", color:"rgba(255,255,255,0.18)" }}>3x3 BASKETBALL</div>
+          letterSpacing:"0.35em", color: D("rgba(255,255,255,0.18)","rgba(255,255,255,0.75)") }}>3x3 BASKETBALL</div>
         {isOvertime && (
           <div style={{ padding:"4px 18px", background:"rgba(255,215,0,0.12)",
             border:"1.5px solid rgba(255,215,0,0.4)", borderRadius:8,
@@ -185,7 +192,7 @@ function CenterCol({ state }) {
           <div style={{ padding:"3px 14px", background:"rgba(255,255,255,0.07)",
             border:"1px solid rgba(255,255,255,0.18)", borderRadius:8,
             fontFamily:"'Barlow Condensed',sans-serif", fontSize:16, fontWeight:800,
-            color:"rgba(255,255,255,0.55)", letterSpacing:"0.2em" }}>⊕ JUMP BALL</div>
+            color: D("rgba(255,255,255,0.55)","rgba(255,255,255,0.9)"), letterSpacing:"0.2em" }}>⊕ JUMP BALL</div>
         )}
       </div>
 
@@ -213,22 +220,23 @@ function CenterCol({ state }) {
         transition:"all .3s",
       }}>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-          letterSpacing:"0.4em", color:"rgba(255,255,255,0.3)", marginBottom:4 }}>SHOT CLOCK</div>
+          letterSpacing:"0.4em", color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"), marginBottom:4 }}>SHOT CLOCK</div>
         <div style={{
           fontFamily:"'Bebas Neue',Impact,sans-serif", fontSize:130, lineHeight:0.85,
           color: shotColor,
-          textShadow: shotUrgent ? "0 0 60px rgba(255,30,30,0.9)" : `0 0 40px ${shotColor}55`,
+          textShadow: shotUrgent ? "0 0 60px rgba(255,30,30,0.9)" : (dayMode ? "none" : `0 0 40px ${shotColor}55`),
+          WebkitTextStroke: dayMode ? "2px rgba(0,0,0,0.6)" : "0px transparent",
           transition:"color .15s, text-shadow .15s",
         }}>{fmtShot(shotClockTenths)}</div>
         {/* Progress bar */}
-        <div style={{ height:3, background:"rgba(255,255,255,0.07)", borderRadius:2,
+        <div style={{ height:3, background: D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)"), borderRadius:2,
           overflow:"hidden", marginTop:10 }}>
           <div style={{ height:"100%", borderRadius:2, transition:"width .1s linear",
             width:`${Math.min(100,(shotClockTenths/120)*100)}%`,
             background: shotColor }} />
         </div>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:700,
-          color:"rgba(255,255,255,0.2)", letterSpacing:"0.2em", marginTop:6 }}>
+          color: D("rgba(255,255,255,0.2)","rgba(255,255,255,0.7)"), letterSpacing:"0.2em", marginTop:6 }}>
           {shotRunning ? "▶ RUNNING" : "■ STOPPED"}
         </div>
       </div>
@@ -236,26 +244,27 @@ function CenterCol({ state }) {
       {/* Game Clock */}
       <div style={{ textAlign:"center" }}>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-          letterSpacing:"0.4em", color:"rgba(255,255,255,0.25)" }}>GAME CLOCK</div>
+          letterSpacing:"0.4em", color: D("rgba(255,255,255,0.25)","rgba(255,255,255,0.85)") }}>GAME CLOCK</div>
         <div style={{
           fontFamily:"'Bebas Neue',Impact,sans-serif",
           fontSize: clockTenths <= 600 ? 86 : 72,
           lineHeight:1, color: clockColor,
           textShadow: gameOver0 ? "0 0 60px rgba(255,0,0,0.8)" :
                       isRunning ? "0 0 40px rgba(255,215,0,0.6)" : "none",
+          WebkitTextStroke: dayMode ? "2px rgba(0,0,0,0.6)" : "0px transparent",
           transition:"color .2s, text-shadow .2s",
           letterSpacing:"0.02em",
         }}>{fmtClock(clockTenths)}</div>
         <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:14, fontWeight:800,
           letterSpacing:"0.2em", marginTop:-2,
-          color: isRunning ? "rgba(255,215,0,0.5)" : "rgba(255,255,255,0.15)" }}>
+          color: isRunning ? D("rgba(255,215,0,0.5)","rgba(255,215,0,0.9)") : D("rgba(255,255,255,0.15)","rgba(255,255,255,0.7)") }}>
           {gameOver ? "■ FINAL" : isRunning ? "▶ LIVE" : "■ PAUSED"}
         </div>
       </div>
 
       {/* VS / Score separator */}
       <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:900,
-        letterSpacing:"0.3em", color:"rgba(255,255,255,0.1)" }}>VS</div>
+        letterSpacing:"0.3em", color: D("rgba(255,255,255,0.1)","rgba(255,255,255,0.5)") }}>VS</div>
 
     </div>
   );
@@ -267,6 +276,13 @@ export default function TvPage() {
   const courtId         = (searchParams.get("court") || "A").toUpperCase();
   const [state, setState] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [dayMode, setDayMode] = useState(() => {
+    try { return localStorage.getItem(DAYMODE_KEY) === "1"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(DAYMODE_KEY, dayMode ? "1" : "0"); } catch {}
+  }, [dayMode]);
 
   useEffect(() => {
     socket.on("connect",     () => setConnected(true));
@@ -280,10 +296,13 @@ export default function TvPage() {
     };
   }, [courtId]);
 
-  /* Court selector overlay (press C or click corner) */
+  /* Court selector overlay (press C or click corner) / Day mode (press D) */
   const [showSelector, setShowSelector] = useState(false);
   useEffect(() => {
-    const h = e => { if (e.key === "c" || e.key === "C") setShowSelector(v=>!v); };
+    const h = e => {
+      if (e.key === "c" || e.key === "C") setShowSelector(v=>!v);
+      else if (e.key === "d" || e.key === "D") setDayMode(v=>!v);
+    };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
@@ -306,7 +325,7 @@ export default function TvPage() {
   return (
     <div style={{
       width:"100vw", height:"100vh", overflow:"hidden",
-      background:"radial-gradient(ellipse at 50% 0%, #0e0818 0%, #050505 60%)",
+      background: dayMode ? "#000" : "radial-gradient(ellipse at 50% 0%, #0e0818 0%, #050505 60%)",
       display:"flex", flexDirection:"column",
       fontFamily:"system-ui",
     }}>
@@ -319,17 +338,17 @@ export default function TvPage() {
 
       {/* Top bar */}
       <div style={{
-        height:52, background:"rgba(0,0,0,0.7)", borderBottom:"1px solid rgba(255,255,255,0.04)",
+        height:52, background:"rgba(0,0,0,0.7)", borderBottom: `1px solid ${dayMode ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.04)"}`,
         display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", flexShrink:0,
       }}>
         <div style={{ display:"flex", alignItems:"center", gap:16 }}>
           <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-            letterSpacing:"0.45em", color:"rgba(255,255,255,0.2)" }}>
+            letterSpacing:"0.45em", color: dayMode ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)" }}>
             3×3 BASKETBALL
           </span>
           {/* Win condition indicator */}
           <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:700,
-            letterSpacing:"0.3em", color:"rgba(255,255,255,0.12)" }}>
+            letterSpacing:"0.3em", color: dayMode ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.12)" }}>
             WIN AT 21 · SHOT CLOCK 12s
           </span>
         </div>
@@ -337,13 +356,14 @@ export default function TvPage() {
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           {/* Court badge */}
           <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:"0.2em",
-            color:"rgba(255,255,255,0.35)", background:"rgba(255,255,255,0.05)",
-            border:"1px solid rgba(255,255,255,0.08)", borderRadius:8, padding:"3px 14px" }}>
+            color: dayMode ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
+            background: dayMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
+            border: `1px solid ${dayMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius:8, padding:"3px 14px" }}>
             สนาม {courtId}
           </div>
           {/* Status dot */}
           <div style={{ display:"flex", alignItems:"center", gap:6,
-            color: connected ? "rgba(0,232,122,0.55)" : "rgba(255,80,80,0.55)",
+            color: connected ? (dayMode ? "rgba(0,232,122,0.95)" : "rgba(0,232,122,0.55)") : (dayMode ? "rgba(255,80,80,0.95)" : "rgba(255,80,80,0.55)"),
             fontFamily:"'Barlow Condensed',sans-serif", fontSize:12, fontWeight:700, letterSpacing:"0.2em" }}>
             <div style={{ width:7, height:7, borderRadius:"50%",
               background: connected ? "#00E87A" : "#FF5050",
@@ -352,9 +372,19 @@ export default function TvPage() {
             }} />
             {connected ? (state?.isRunning ? "LIVE" : "READY") : "OFFLINE"}
           </div>
+          {/* Day mode toggle */}
+          <div onClick={() => setDayMode(v=>!v)} style={{ cursor:"pointer",
+            fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:800,
+            padding:"3px 10px", borderRadius:8,
+            background: dayMode ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)",
+            border: `1px solid ${dayMode ? "rgba(255,215,0,0.5)" : "rgba(255,255,255,0.1)"}`,
+            color: dayMode ? "#FFD700" : "rgba(255,255,255,0.3)",
+            letterSpacing:"0.15em" }}>
+            {dayMode ? "☀ DAY [D]" : "🌙 NIGHT [D]"}
+          </div>
           {/* Corner hint */}
           <div onClick={() => setShowSelector(v=>!v)} style={{ cursor:"pointer",
-            fontFamily:"'Barlow Condensed',sans-serif", fontSize:10, color:"rgba(255,255,255,0.1)",
+            fontFamily:"'Barlow Condensed',sans-serif", fontSize:10, color: dayMode ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.1)",
             letterSpacing:"0.2em" }}>
             [C] สนาม
           </div>
@@ -363,9 +393,9 @@ export default function TvPage() {
 
       {/* Main area */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <TeamPanel team={state.teamA} tKey="teamA" state={state} flip={false} />
-        <CenterCol state={state} />
-        <TeamPanel team={state.teamB} tKey="teamB" state={state} flip={true} />
+        <TeamPanel team={state.teamA} tKey="teamA" state={state} flip={false} dayMode={dayMode} />
+        <CenterCol state={state} dayMode={dayMode} />
+        <TeamPanel team={state.teamB} tKey="teamB" state={state} flip={true} dayMode={dayMode} />
       </div>
 
       {/* Bottom bar — thin accent */}
