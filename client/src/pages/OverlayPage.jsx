@@ -1,13 +1,16 @@
 /**
  * 🎥 OverlayPage — OBS Browser Source
- * URL: /overlay?court=A
+ * URL: /overlay?court=A&theme=night|day|arena|sunset
  * Size: 1920×1080, Allow Transparency: ON
  *
+ * Theme is read from the URL (not a picker) since this page is loaded
+ * inside OBS's browser source — set it once when adding the source.
  * Fix: แสดง loading state แทนที่จะ return ว่างเมื่อยังเชื่อมต่อไม่ได้
  */
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { socket } from "../socket.js";
+import { THEMES } from "../theme.jsx";
 
 function fmtClock(t) {
   t = Math.max(0, t);
@@ -26,11 +29,12 @@ function fmtShot(t) {
 const B = "'Oswald',Impact,sans-serif";
 const C = "'Barlow Condensed',sans-serif";
 
-function TeamBox({ team, tKey, possession, flip }) {
+function TeamBox({ team, tKey, possession, flip, theme }) {
   const poss  = possession === tKey;
   const bonus = team.teamFouls >= 6;
   const nl    = team.name.length;
   const ns    = nl <= 8 ? 30 : nl <= 14 ? 22 : 16;
+  const D     = (dim, bright) => (theme.highContrast ? bright : dim);
 
   return (
     <div style={{ display:"flex", flexDirection:flip?"row-reverse":"row", alignItems:"stretch", height:"100%" }}>
@@ -51,10 +55,10 @@ function TeamBox({ team, tKey, possession, flip }) {
           {/* Timeout pip */}
           <div style={{ display:"flex", gap:3 }}>
             <div style={{ width:18, height:5, borderRadius:3,
-              background: team.timeouts > 0 ? "#FFF" : "rgba(255,255,255,0.15)" }}/>
+              background: team.timeouts > 0 ? "#FFF" : D("rgba(255,255,255,0.15)","rgba(255,255,255,0.4)") }}/>
           </div>
           <span style={{ fontFamily:C, fontSize:13, fontWeight:800,
-            color:"rgba(255,255,255,0.35)", letterSpacing:"0.08em" }}>
+            color: D("rgba(255,255,255,0.35)","rgba(255,255,255,0.85)"), letterSpacing:"0.08em" }}>
             F {team.teamFouls}
           </span>
           {bonus && <span style={{ fontFamily:C, fontSize:12, fontWeight:900, color:"#FF3333" }}>BONUS</span>}
@@ -77,6 +81,7 @@ function TeamBox({ team, tKey, possession, flip }) {
 export default function OverlayPage() {
   const [sp]              = useSearchParams();
   const court             = (sp.get("court") || "A").toUpperCase();
+  const theme             = THEMES[sp.get("theme")] || THEMES.night;
   const [state, setS]     = useState(null);
   const [connected, setCn] = useState(false);
 
@@ -148,6 +153,7 @@ export default function OverlayPage() {
   const shotWarn   = shotSec <= 5 && shotClockTenths > 0;
   const shotColor  = shotUrgent ? "#FF2222" : shotWarn ? "#FFA500" : "#FFD700";
   const gameEnd    = clockTenths === 0 && !isRunning;
+  const D          = (dim, bright) => (theme.highContrast ? bright : dim);
 
   return (
     <div style={{
@@ -184,12 +190,12 @@ export default function OverlayPage() {
         {/* Main scoreboard bar */}
         <div style={{
           display:"flex", height:80,
-          background:"rgba(12,14,22,0.96)",
-          borderRadius:10, border:"1px solid rgba(255,255,255,0.08)",
+          background: theme.overlayBg,
+          borderRadius:10, border:`1px solid ${theme.overlayBorder}`,
           boxShadow:"0 12px 50px rgba(0,0,0,0.8)",
           overflow:"hidden",
         }}>
-          <TeamBox team={teamA} tKey="teamA" possession={possession} flip={false}/>
+          <TeamBox team={teamA} tKey="teamA" possession={possession} flip={false} theme={theme}/>
 
           {/* Clock */}
           <div style={{ width:160, display:"flex", flexDirection:"column",
@@ -204,30 +210,30 @@ export default function OverlayPage() {
               {fmtClock(clockTenths)}
             </span>
             <span style={{ fontFamily:C, fontSize:11, fontWeight:800, letterSpacing:"0.1em",
-              color: isRunning ? "rgba(255,215,0,0.5)" : "rgba(255,255,255,0.25)" }}>
+              color: isRunning ? D("rgba(255,215,0,0.5)","rgba(255,215,0,0.9)") : D("rgba(255,255,255,0.25)","rgba(255,255,255,0.75)") }}>
               {gameEnd ? "■ END" : isRunning ? "▶ LIVE" : "■ STOP"}
             </span>
           </div>
 
-          <TeamBox team={teamB} tKey="teamB" possession={possession} flip={true}/>
+          <TeamBox team={teamB} tKey="teamB" possession={possession} flip={true} theme={theme}/>
         </div>
 
         {/* Shot clock tab */}
         <div style={{
           marginTop:-1, padding:"4px 22px",
-          background: shotUrgent ? "rgba(200,0,0,0.93)" : "rgba(18,20,30,0.97)",
+          background: shotUrgent ? "rgba(200,0,0,0.93)" : theme.overlayBg,
           borderBottomLeftRadius:10, borderBottomRightRadius:10,
-          border:"1px solid rgba(255,255,255,0.08)", borderTop:"none",
+          border:`1px solid ${theme.overlayBorder}`, borderTop:"none",
           display:"flex", alignItems:"center", gap:10,
           boxShadow:"0 6px 20px rgba(0,0,0,0.5)",
           transition:"background .3s",
         }}>
           <span style={{ fontFamily:C, fontSize:14, fontWeight:800, letterSpacing:"0.1em",
-            color: shotUrgent ? "#FFF" : "rgba(255,255,255,0.35)" }}>SHOT</span>
+            color: shotUrgent ? "#FFF" : D("rgba(255,255,255,0.35)","rgba(255,255,255,0.8)") }}>SHOT</span>
           <span style={{ fontFamily:B, fontSize:28, fontWeight:700, lineHeight:1, color:shotColor }}>
             {fmtShot(shotClockTenths)}
           </span>
-          <span style={{ fontFamily:C, fontSize:11, color:"rgba(255,255,255,0.2)" }}>3x3=12s</span>
+          <span style={{ fontFamily:C, fontSize:11, color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.6)") }}>3x3=12s</span>
         </div>
 
       </div>

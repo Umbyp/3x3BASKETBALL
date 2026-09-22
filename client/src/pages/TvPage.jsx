@@ -6,7 +6,7 @@
  * - ตัวเลขคะแนนขนาดใหญ่มาก
  * - Shot clock ใหญ่ชัดเจน
  * - ไม่มีปุ่ม operator
- * - Day Mode [D]: เพิ่มคอนทราสต์สำหรับใช้กลางแจ้ง/แสงจ้า
+ * - Theme [D]: เลือกธีมให้เหมาะกับสถานการณ์ (มืด/แดดจ้า/อารีน่า/พลบค่ำ)
  * - รองรับ landscape เต็มจอ
  */
 
@@ -14,8 +14,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { socket } from "../socket.js";
 import { COURTS, DIVISIONS } from "../constants.js";
-
-const DAYMODE_KEY = "b3x3_daymode";
+import { useTheme, ThemeSwitcher } from "../theme.jsx";
 
 function fmtClock(tenths) {
   const t = Math.max(0, tenths);
@@ -32,8 +31,8 @@ function fmtShot(tenths) {
 }
 
 /* ─── Foul dots ────────────────────────────────────────────────────────────── */
-function FoulDots({ count, color, max = 6, dayMode }) {
-  const D = (dim, bright) => (dayMode ? bright : dim);
+function FoulDots({ count, color, max = 6, theme }) {
+  const D = (dim, bright) => (theme.highContrast ? bright : dim);
   return (
     <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
       {Array.from({ length: max }).map((_, i) => (
@@ -50,9 +49,9 @@ function FoulDots({ count, color, max = 6, dayMode }) {
 }
 
 /* ─── Team Panel ───────────────────────────────────────────────────────────── */
-function TeamPanel({ team, tKey, state, flip, dayMode }) {
+function TeamPanel({ team, tKey, state, flip, theme }) {
   const { color, name, score, teamFouls, timeouts } = team;
-  const D = (dim, bright) => (dayMode ? bright : dim);
+  const D = (dim, bright) => (theme.highContrast ? bright : dim);
   const bonus   = teamFouls >= 6;
   const hasBall = state.possession === tKey;
   const nameLen = name.length;
@@ -77,7 +76,7 @@ function TeamPanel({ team, tKey, state, flip, dayMode }) {
         justifyContent: "space-between",
         padding: flip ? "40px 50px 40px 60px" : "40px 60px 40px 50px",
         textAlign: flip ? "right" : "left",
-        background: dayMode ? "none" : `linear-gradient(${flip?"270deg":"90deg"}, rgba(0,0,0,0) 0%, ${color}09 100%)`,
+        background: theme.highContrast ? "none" : `linear-gradient(${flip?"270deg":"90deg"}, rgba(0,0,0,0) 0%, ${color}09 100%)`,
       }}>
 
         {/* Name + ball indicator */}
@@ -98,8 +97,8 @@ function TeamPanel({ team, tKey, state, flip, dayMode }) {
           <div style={{
             fontFamily:"'Bebas Neue',Impact,sans-serif",
             fontSize: nameSz, lineHeight: 1.05, color: "#FFF",
-            textShadow: dayMode ? "none" : `0 0 60px ${color}44`,
-            WebkitTextStroke: dayMode ? "1px rgba(0,0,0,0.5)" : "0px transparent",
+            textShadow: theme.highContrast ? "none" : `0 0 60px ${color}44`,
+            WebkitTextStroke: theme.highContrast ? "1px rgba(0,0,0,0.5)" : "0px transparent",
             letterSpacing: "0.03em",
             wordBreak: "break-word",
           }}>{name}</div>
@@ -110,8 +109,8 @@ function TeamPanel({ team, tKey, state, flip, dayMode }) {
           fontFamily:"'Bebas Neue',Impact,sans-serif",
           fontSize: 280, lineHeight: 0.82,
           color,
-          textShadow: dayMode ? "none" : `0 0 120px ${color}55, 0 0 40px ${color}33`,
-          WebkitTextStroke: dayMode ? "2px rgba(0,0,0,0.6)" : "0px transparent",
+          textShadow: theme.highContrast ? "none" : `0 0 120px ${color}55, 0 0 40px ${color}33`,
+          WebkitTextStroke: theme.highContrast ? "2px rgba(0,0,0,0.6)" : "0px transparent",
           margin: "0 -10px",
         }}>{score}</div>
 
@@ -144,7 +143,7 @@ function TeamPanel({ team, tKey, state, flip, dayMode }) {
             }}>
               FOULS {teamFouls}/6 {bonus ? "— BONUS" : ""}
             </div>
-            <FoulDots count={teamFouls} color={color} dayMode={dayMode} />
+            <FoulDots count={teamFouls} color={color} theme={theme} />
           </div>
 
         </div>
@@ -154,10 +153,10 @@ function TeamPanel({ team, tKey, state, flip, dayMode }) {
 }
 
 /* ─── Center column ────────────────────────────────────────────────────────── */
-function CenterCol({ state, dayMode }) {
+function CenterCol({ state, theme }) {
   const { clockTenths, isRunning, shotClockTenths, shotRunning,
           gameOver, winner, isOvertime, jumpBall, teamA, teamB } = state;
-  const D = (dim, bright) => (dayMode ? bright : dim);
+  const D = (dim, bright) => (theme.highContrast ? bright : dim);
 
   const shotSec    = shotClockTenths / 10;
   const shotUrgent = shotSec <= 3 && shotClockTenths > 0;
@@ -173,9 +172,9 @@ function CenterCol({ state, dayMode }) {
       width: 380, flexShrink: 0,
       display:"flex", flexDirection:"column", alignItems:"center",
       justifyContent:"space-between", padding:"30px 0", gap:0,
-      background: dayMode ? "rgba(0,0,0,0.85)" : "rgba(0,0,0,0.55)",
-      borderLeft: `1px solid ${D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`,
-      borderRight: `1px solid ${D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)")}`,
+      background: theme.panelBg,
+      borderLeft: `1px solid ${theme.panelBorder}`,
+      borderRight: `1px solid ${theme.panelBorder}`,
     }}>
 
       {/* TOP: 3x3 + OT badge */}
@@ -224,8 +223,8 @@ function CenterCol({ state, dayMode }) {
         <div style={{
           fontFamily:"'Bebas Neue',Impact,sans-serif", fontSize:130, lineHeight:0.85,
           color: shotColor,
-          textShadow: shotUrgent ? "0 0 60px rgba(255,30,30,0.9)" : (dayMode ? "none" : `0 0 40px ${shotColor}55`),
-          WebkitTextStroke: dayMode ? "2px rgba(0,0,0,0.6)" : "0px transparent",
+          textShadow: shotUrgent ? "0 0 60px rgba(255,30,30,0.9)" : (theme.highContrast ? "none" : `0 0 40px ${shotColor}55`),
+          WebkitTextStroke: theme.highContrast ? "2px rgba(0,0,0,0.6)" : "0px transparent",
           transition:"color .15s, text-shadow .15s",
         }}>{fmtShot(shotClockTenths)}</div>
         {/* Progress bar */}
@@ -251,7 +250,7 @@ function CenterCol({ state, dayMode }) {
           lineHeight:1, color: clockColor,
           textShadow: gameOver0 ? "0 0 60px rgba(255,0,0,0.8)" :
                       isRunning ? "0 0 40px rgba(255,215,0,0.6)" : "none",
-          WebkitTextStroke: dayMode ? "2px rgba(0,0,0,0.6)" : "0px transparent",
+          WebkitTextStroke: theme.highContrast ? "2px rgba(0,0,0,0.6)" : "0px transparent",
           transition:"color .2s, text-shadow .2s",
           letterSpacing:"0.02em",
         }}>{fmtClock(clockTenths)}</div>
@@ -276,13 +275,7 @@ export default function TvPage() {
   const courtId         = (searchParams.get("court") || "A").toUpperCase();
   const [state, setState] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [dayMode, setDayMode] = useState(() => {
-    try { return localStorage.getItem(DAYMODE_KEY) === "1"; } catch { return false; }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem(DAYMODE_KEY, dayMode ? "1" : "0"); } catch {}
-  }, [dayMode]);
+  const { theme, themeId, setThemeId, cycleTheme } = useTheme();
 
   useEffect(() => {
     socket.on("connect",     () => setConnected(true));
@@ -296,12 +289,12 @@ export default function TvPage() {
     };
   }, [courtId]);
 
-  /* Court selector overlay (press C or click corner) / Day mode (press D) */
+  /* Court selector overlay (press C or click corner) / cycle theme (press D) */
   const [showSelector, setShowSelector] = useState(false);
   useEffect(() => {
     const h = e => {
       if (e.key === "c" || e.key === "C") setShowSelector(v=>!v);
-      else if (e.key === "d" || e.key === "D") setDayMode(v=>!v);
+      else if (e.key === "d" || e.key === "D") cycleTheme();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -325,7 +318,7 @@ export default function TvPage() {
   return (
     <div style={{
       width:"100vw", height:"100vh", overflow:"hidden",
-      background: dayMode ? "#000" : "radial-gradient(ellipse at 50% 0%, #0e0818 0%, #050505 60%)",
+      background: theme.mainBg,
       display:"flex", flexDirection:"column",
       fontFamily:"system-ui",
     }}>
@@ -338,17 +331,17 @@ export default function TvPage() {
 
       {/* Top bar */}
       <div style={{
-        height:52, background:"rgba(0,0,0,0.7)", borderBottom: `1px solid ${dayMode ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.04)"}`,
+        height:52, background:"rgba(0,0,0,0.7)", borderBottom: `1px solid ${theme.highContrast ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.04)"}`,
         display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", flexShrink:0,
       }}>
         <div style={{ display:"flex", alignItems:"center", gap:16 }}>
           <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-            letterSpacing:"0.45em", color: dayMode ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)" }}>
+            letterSpacing:"0.45em", color: theme.highContrast ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)" }}>
             3×3 BASKETBALL
           </span>
           {/* Win condition indicator */}
           <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:700,
-            letterSpacing:"0.3em", color: dayMode ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.12)" }}>
+            letterSpacing:"0.3em", color: theme.highContrast ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.12)" }}>
             WIN AT 21 · SHOT CLOCK 12s
           </span>
         </div>
@@ -356,14 +349,14 @@ export default function TvPage() {
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           {/* Court badge */}
           <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:"0.2em",
-            color: dayMode ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
-            background: dayMode ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
-            border: `1px solid ${dayMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius:8, padding:"3px 14px" }}>
+            color: theme.highContrast ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
+            background: theme.highContrast ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
+            border: `1px solid ${theme.highContrast ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius:8, padding:"3px 14px" }}>
             สนาม {courtId}
           </div>
           {/* Status dot */}
           <div style={{ display:"flex", alignItems:"center", gap:6,
-            color: connected ? (dayMode ? "rgba(0,232,122,0.95)" : "rgba(0,232,122,0.55)") : (dayMode ? "rgba(255,80,80,0.95)" : "rgba(255,80,80,0.55)"),
+            color: connected ? (theme.highContrast ? "rgba(0,232,122,0.95)" : "rgba(0,232,122,0.55)") : (theme.highContrast ? "rgba(255,80,80,0.95)" : "rgba(255,80,80,0.55)"),
             fontFamily:"'Barlow Condensed',sans-serif", fontSize:12, fontWeight:700, letterSpacing:"0.2em" }}>
             <div style={{ width:7, height:7, borderRadius:"50%",
               background: connected ? "#00E87A" : "#FF5050",
@@ -372,19 +365,11 @@ export default function TvPage() {
             }} />
             {connected ? (state?.isRunning ? "LIVE" : "READY") : "OFFLINE"}
           </div>
-          {/* Day mode toggle */}
-          <div onClick={() => setDayMode(v=>!v)} style={{ cursor:"pointer",
-            fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:800,
-            padding:"3px 10px", borderRadius:8,
-            background: dayMode ? "rgba(255,215,0,0.18)" : "rgba(255,255,255,0.05)",
-            border: `1px solid ${dayMode ? "rgba(255,215,0,0.5)" : "rgba(255,255,255,0.1)"}`,
-            color: dayMode ? "#FFD700" : "rgba(255,255,255,0.3)",
-            letterSpacing:"0.15em" }}>
-            {dayMode ? "☀ DAY [D]" : "🌙 NIGHT [D]"}
-          </div>
+          {/* Theme switcher */}
+          <ThemeSwitcher themeId={themeId} setThemeId={setThemeId} />
           {/* Corner hint */}
           <div onClick={() => setShowSelector(v=>!v)} style={{ cursor:"pointer",
-            fontFamily:"'Barlow Condensed',sans-serif", fontSize:10, color: dayMode ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.1)",
+            fontFamily:"'Barlow Condensed',sans-serif", fontSize:10, color: theme.highContrast ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.1)",
             letterSpacing:"0.2em" }}>
             [C] สนาม
           </div>
@@ -393,9 +378,9 @@ export default function TvPage() {
 
       {/* Main area */}
       <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <TeamPanel team={state.teamA} tKey="teamA" state={state} flip={false} dayMode={dayMode} />
-        <CenterCol state={state} dayMode={dayMode} />
-        <TeamPanel team={state.teamB} tKey="teamB" state={state} flip={true} dayMode={dayMode} />
+        <TeamPanel team={state.teamA} tKey="teamA" state={state} flip={false} theme={theme} />
+        <CenterCol state={state} theme={theme} />
+        <TeamPanel team={state.teamB} tKey="teamB" state={state} flip={true} theme={theme} />
       </div>
 
       {/* Bottom bar — thin accent */}
