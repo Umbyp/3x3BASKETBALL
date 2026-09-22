@@ -12,6 +12,7 @@ export default function TournamentBridge({ state, send, divisionId, courtId }) {
   const divConfig = DIVISIONS.find(d=>d.id===divisionId)||DIVISIONS[0];
 
   useEffect(()=>{
+    if(!db) return;
     const r = ref(db, `tournament_data/${divisionId}`);
     return onValue(r, snap => { if(snap.val()) setData(snap.val()); });
   },[divisionId]);
@@ -24,7 +25,7 @@ export default function TournamentBridge({ state, send, divisionId, courtId }) {
   const sel = useMemo(()=>allMatches.find(m=>m.id===selId)||null,[allMatches,selId]);
 
   const push = async(finished)=>{
-    if(!sel||!data) return;
+    if(!sel||!data||!db) return;
     setStatus("saving");
     try{
       const isGrp = sel.id < 100;
@@ -59,6 +60,17 @@ export default function TournamentBridge({ state, send, divisionId, courtId }) {
   const S={fontFamily:"'Bebas Neue',Impact,sans-serif"};
   const grpMatches = allMatches.filter(m=>m.round===1);
   const koMatches  = allMatches.filter(m=>m.round>1);
+
+  if(!db) return(
+    <div style={{background:"linear-gradient(160deg,#0d0d20,#08080f)",
+      border:"1px solid rgba(255,255,255,0.06)",borderRadius:14,padding:"8px 14px",marginBottom:10,
+      display:"flex",alignItems:"center",gap:8}}>
+      <span style={{fontSize:14}}>🏆</span>
+      <span style={{...S,fontSize:12,letterSpacing:"0.1em",color:"rgba(255,255,255,0.3)"}}>
+        TOURNAMENT SYNC ไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า Firebase) — คะแนน/นาฬิกาใช้งานปกติ
+      </span>
+    </div>
+  );
 
   return(
     <div style={{background:"linear-gradient(160deg,#0d0d20,#08080f)",

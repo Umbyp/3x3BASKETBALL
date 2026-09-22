@@ -714,6 +714,7 @@ export default function TournamentPage() {
   const now = useNow(30000);
 
   useEffect(() => {
+    if (!db) { setLoad(false); return; }
     setLoad(true);
     const r = ref(db, `tournament_data/${divId}`);
     return onValue(r, snap => {
@@ -769,6 +770,16 @@ export default function TournamentPage() {
     update(ref(db),{[`tournament_data/${divId}/delayMinutes`]:mins})
       .then(()=>setToast({message:`⏰ เลื่อน +${mins} นาที`,type:"info"}));
   };
+
+  if (!db) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center px-6">
+      <div className="text-center max-w-sm">
+        <div className="text-4xl mb-3">⚠️</div>
+        <div className="text-xl font-black text-white tracking-widest mb-2">TOURNAMENT SYNC ไม่พร้อมใช้งาน</div>
+        <div className="text-sm text-gray-400">ยังไม่ได้ตั้งค่า Firebase (VITE_FIREBASE_* env vars) — หน้านี้ต้องใช้ Firebase เก็บตารางแข่ง/ผลการแข่งขัน</div>
+      </div>
+    </div>
+  );
 
   if (loading) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
