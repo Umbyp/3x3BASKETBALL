@@ -3,14 +3,13 @@
  * URL: /tv?court=A
  *
  * ออกแบบสำหรับแสดงบนจอ 1920×1080 Full HD
- * - ตัวเลขคะแนนขนาดใหญ่มาก
- * - Shot clock ใหญ่ชัดเจน
+ * สไตล์กระดานคะแนนสนามจริง: กล่องเลขคะแนนขอบขาว พื้นหลังดำ สีใช้เท่าที่จำเป็น
+ * (สีทีม + สีแดง/เหลืองสำหรับสถานะเตือน/นับถอยหลัง เท่านั้น)
  * - ไม่มีปุ่ม operator
  * - Theme [D]: เลือกธีมให้เหมาะกับสถานการณ์ (มืด/แดดจ้า/อารีน่า/พลบค่ำ)
- * - รองรับ landscape เต็มจอ
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { socket } from "../socket.js";
 import { COURTS, DIVISIONS } from "../constants.js";
@@ -24,247 +23,133 @@ function fmtClock(tenths) {
   }
   return `${String(Math.floor(t / 10)).padStart(2,"0")}.${t % 10}`;
 }
-function fmtShot(tenths) {
-  const t = Math.max(0, tenths);
+function fmtShot(t) {
+  t = Math.max(0, t);
   if (t > 120) return String(Math.ceil(t / 10));
   return `${Math.floor(t / 10)}.${t % 10}`;
 }
 
-/* ─── Foul dots ────────────────────────────────────────────────────────────── */
-function FoulDots({ count, color, max = 6, theme }) {
-  const D = (dim, bright) => (theme.highContrast ? bright : dim);
+const BEBAS = "'Bebas Neue',Impact,sans-serif";
+const COND  = "'Barlow Condensed',sans-serif";
+
+/* ─── Team name row ────────────────────────────────────────────────────────── */
+function TeamName({ team, align, hasBall }) {
+  const nl = team.name.length;
+  const fs = nl <= 10 ? 46 : nl <= 16 ? 36 : 26;
   return (
-    <div style={{ display:"flex", gap:8, justifyContent:"center" }}>
-      {Array.from({ length: max }).map((_, i) => (
-        <div key={i} style={{
-          width: 18, height: 18, borderRadius:"50%",
-          background: i < count ? (count >= max ? "#FF3333" : color) : D("rgba(255,255,255,0.08)","rgba(255,255,255,0.35)"),
-          border: `2px solid ${i < count ? (count >= max ? "#FF3333" : color) : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.45)")}`,
-          boxShadow: i < count ? `0 0 10px ${count >= max ? "#FF333388" : color+"66"}` : "none",
-          transition: "all .25s",
-        }} />
-      ))}
+    <div style={{ display:"flex", flexDirection:"column", gap:6,
+      alignItems: align === "left" ? "flex-start" : "flex-end" }}>
+      <div style={{ height:20, display:"flex", alignItems:"center", gap:8,
+        flexDirection: align === "left" ? "row" : "row-reverse" }}>
+        {hasBall && (
+          <span style={{ display:"flex", alignItems:"center", gap:6,
+            flexDirection: align === "left" ? "row" : "row-reverse" }}>
+            <span style={{ width:8, height:8, borderRadius:"50%", background: team.color,
+              boxShadow:`0 0 8px ${team.color}` }}/>
+            <span style={{ fontFamily:COND, fontSize:13, fontWeight:800, letterSpacing:"0.25em",
+              color: team.color }}>BALL</span>
+          </span>
+        )}
+      </div>
+      <span style={{ fontFamily:BEBAS, fontSize:fs, lineHeight:1, color:"#FFF",
+        letterSpacing:"0.03em", wordBreak:"break-word", textAlign: align }}>
+        {team.name}
+      </span>
     </div>
   );
 }
 
-/* ─── Team Panel ───────────────────────────────────────────────────────────── */
-function TeamPanel({ team, tKey, state, flip, theme }) {
-  const { color, name, score, teamFouls, timeouts } = team;
+/* ─── Score box ────────────────────────────────────────────────────────────── */
+function ScoreBox({ team, theme }) {
   const D = (dim, bright) => (theme.highContrast ? bright : dim);
-  const bonus   = teamFouls >= 6;
-  const hasBall = state.possession === tKey;
-  const nameLen = name.length;
-  const nameSz  = nameLen <= 8 ? 72 : nameLen <= 13 ? 54 : nameLen <= 18 ? 42 : 32;
-
   return (
     <div style={{
-      flex: 1,
-      display: "flex",
-      flexDirection: flip ? "row-reverse" : "row",
-      alignItems: "stretch",
-      position: "relative",
-      overflow: "hidden",
+      width:230, height:180, display:"flex", alignItems:"center", justifyContent:"center",
+      border:`4px solid ${D("rgba(255,255,255,0.7)","#FFFFFF")}`, borderRadius:16,
+      background:"rgba(0,0,0,0.3)", flexShrink:0,
     }}>
-      {/* Accent bar */}
-      <div style={{ width: 8, background: color, flexShrink: 0,
-        boxShadow: `0 0 40px ${color}`, borderRadius: flip ? "4px 0 0 4px" : "0 4px 4px 0" }} />
+      <span style={{ fontFamily:BEBAS, fontSize:140, lineHeight:1, color:"#FFF" }}>
+        {String(Math.max(0, team.score)).padStart(2,"0")}
+      </span>
+    </div>
+  );
+}
 
-      {/* Content */}
+/* ─── Fouls box ────────────────────────────────────────────────────────────── */
+function FoulsBox({ team, theme }) {
+  const D = (dim, bright) => (theme.highContrast ? bright : dim);
+  const bonus = team.teamFouls >= 6;
+  return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
+      <span style={{ fontFamily:COND, fontSize:15, fontWeight:800, letterSpacing:"0.35em",
+        color: bonus ? "#FF3333" : D("rgba(255,255,255,0.45)","rgba(255,255,255,0.85)") }}>
+        FOULS{bonus ? " · BONUS" : ""}
+      </span>
       <div style={{
-        flex: 1, display: "flex", flexDirection: "column",
-        justifyContent: "space-between",
-        padding: flip ? "40px 50px 40px 60px" : "40px 60px 40px 50px",
-        textAlign: flip ? "right" : "left",
-        background: theme.highContrast ? "none" : `linear-gradient(${flip?"270deg":"90deg"}, rgba(0,0,0,0) 0%, ${color}09 100%)`,
+        width:84, height:66, display:"flex", alignItems:"center", justifyContent:"center",
+        border:`3px solid ${bonus ? "#FF3333" : D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")}`,
+        borderRadius:12, background:"rgba(0,0,0,0.3)",
       }}>
-
-        {/* Name + ball indicator */}
-        <div>
-          {hasBall && (
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              background: color+"22", border: `1px solid ${color}55`,
-              borderRadius: 8, padding: "4px 14px", marginBottom: 12,
-              flexDirection: flip ? "row-reverse" : "row",
-            }}>
-              <div style={{ width: 10, height: 10, borderRadius:"50%", background: color,
-                boxShadow:`0 0 8px ${color}`, animation:"pulse-slow 1.5s infinite" }} />
-              <span style={{ fontFamily:"'Bebas Neue',Impact,sans-serif", fontSize:22,
-                color, letterSpacing:"0.15em" }}>BALL</span>
-            </div>
-          )}
-          <div style={{
-            fontFamily:"'Bebas Neue',Impact,sans-serif",
-            fontSize: nameSz, lineHeight: 1.05, color: "#FFF",
-            textShadow: theme.highContrast ? "none" : `0 0 60px ${color}44`,
-            WebkitTextStroke: theme.highContrast ? "1px rgba(0,0,0,0.5)" : "0px transparent",
-            letterSpacing: "0.03em",
-            wordBreak: "break-word",
-          }}>{name}</div>
-        </div>
-
-        {/* Score — massive */}
-        <div style={{
-          fontFamily:"'Bebas Neue',Impact,sans-serif",
-          fontSize: 280, lineHeight: 0.82,
-          color,
-          textShadow: theme.highContrast ? "none" : `0 0 120px ${color}55, 0 0 40px ${color}33`,
-          WebkitTextStroke: theme.highContrast ? "2px rgba(0,0,0,0.6)" : "0px transparent",
-          margin: "0 -10px",
-        }}>{score}</div>
-
-        {/* Stats */}
-        <div style={{ display:"flex", flexDirection:"column", gap:16,
-          alignItems: flip ? "flex-end" : "flex-start" }}>
-
-          {/* Timeout pip */}
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18,
-              fontWeight:700, color: D("rgba(255,255,255,0.4)","rgba(255,255,255,0.9)"), letterSpacing:"0.1em" }}>TO</span>
-            <div style={{ display:"flex", gap:6 }}>
-              {Array.from({length:1}).map((_,i)=>(
-                <div key={i} style={{
-                  width: 28, height: 10, borderRadius: 5,
-                  background: i < timeouts ? color : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.4)"),
-                  boxShadow: i < timeouts ? `0 0 8px ${color}` : "none",
-                }} />
-              ))}
-            </div>
-          </div>
-
-          {/* Fouls */}
-          <div>
-            <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18,
-              fontWeight:800, letterSpacing:"0.15em",
-              color: bonus ? "#FF4444" : D("rgba(255,255,255,0.35)","rgba(255,255,255,0.9)"),
-              marginBottom: 8,
-              textAlign: flip ? "right" : "left",
-            }}>
-              FOULS {teamFouls}/6 {bonus ? "— BONUS" : ""}
-            </div>
-            <FoulDots count={teamFouls} color={color} theme={theme} />
-          </div>
-
-        </div>
+        <span style={{ fontFamily:BEBAS, fontSize:46, color: bonus ? "#FF3333" : "#FFF" }}>
+          {team.teamFouls}
+        </span>
       </div>
     </div>
   );
 }
 
-/* ─── Center column ────────────────────────────────────────────────────────── */
-function CenterCol({ state, theme }) {
-  const { clockTenths, isRunning, shotClockTenths, shotRunning,
-          gameOver, winner, isOvertime, jumpBall, teamA, teamB } = state;
+/* ─── Center clock column ──────────────────────────────────────────────────── */
+function CenterClock({ state, courtId, divConfig, theme }) {
+  const { clockTenths, isRunning, shotClockTenths, jumpBall, possession, teamA, teamB } = state;
   const D = (dim, bright) => (theme.highContrast ? bright : dim);
 
   const shotSec    = shotClockTenths / 10;
   const shotUrgent = shotSec <= 3 && shotClockTenths > 0;
   const shotWarn   = shotSec <= 5 && shotClockTenths > 0;
-  const shotColor  = shotUrgent ? "#FF2222" : shotWarn ? "#FF8800" : "#00E87A";
-  const gameOver0  = clockTenths === 0;
-  const clockColor = gameOver0 ? "#FF2222" : isRunning ? "#FFD700" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)");
-
-  const winTeam = winner === "teamA" ? teamA : winner === "teamB" ? teamB : null;
+  const shotColor  = shotUrgent ? "#FF2222" : shotWarn ? "#FFA500" : "#FF3B3B";
+  const gameEnd    = clockTenths === 0;
 
   return (
-    <div style={{
-      width: 380, flexShrink: 0,
-      display:"flex", flexDirection:"column", alignItems:"center",
-      justifyContent:"space-between", padding:"30px 0", gap:0,
-      background: theme.panelBg,
-      borderLeft: `1px solid ${theme.panelBorder}`,
-      borderRight: `1px solid ${theme.panelBorder}`,
-    }}>
-
-      {/* TOP: 3x3 + OT badge */}
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, marginTop:8 }}>
-        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:17, fontWeight:900,
-          letterSpacing:"0.35em", color: D("rgba(255,255,255,0.18)","rgba(255,255,255,0.75)") }}>3x3 BASKETBALL</div>
-        {isOvertime && (
-          <div style={{ padding:"4px 18px", background:"rgba(255,215,0,0.12)",
-            border:"1.5px solid rgba(255,215,0,0.4)", borderRadius:8,
-            fontFamily:"'Bebas Neue',sans-serif", fontSize:20, color:"#FFD700",
-            letterSpacing:"0.2em" }}>⚡ OVERTIME</div>
-        )}
-        {jumpBall && (
-          <div style={{ padding:"3px 14px", background:"rgba(255,255,255,0.07)",
-            border:"1px solid rgba(255,255,255,0.18)", borderRadius:8,
-            fontFamily:"'Barlow Condensed',sans-serif", fontSize:16, fontWeight:800,
-            color: D("rgba(255,255,255,0.55)","rgba(255,255,255,0.9)"), letterSpacing:"0.2em" }}>⊕ JUMP BALL</div>
-        )}
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, width:300, flexShrink:0 }}>
+      <div style={{ fontFamily:COND, fontSize:14, fontWeight:800, letterSpacing:"0.4em",
+        color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)") }}>
+        สนาม {courtId} · {divConfig.label.toUpperCase()}
       </div>
 
-      {/* Game Over */}
-      {gameOver && winTeam && (
-        <div style={{ textAlign:"center", padding:"18px 20px",
-          background:"rgba(255,215,0,0.08)", border:"2px solid rgba(255,215,0,0.4)",
-          borderRadius:18, margin:"0 16px" }}>
-          <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:900,
-            color:"rgba(255,215,0,0.7)", letterSpacing:"0.2em" }}>WINNER</div>
-          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:38,
-            color:"#FFD700", letterSpacing:"0.05em", lineHeight:1.1,
-            animation:"win-flash 1s infinite" }}>{winTeam.name}</div>
-          <div style={{ fontSize:36, marginTop:4 }}>🏆</div>
-        </div>
+      {jumpBall && (
+        <div style={{ padding:"3px 14px", background:"rgba(255,255,255,0.07)",
+          border:"1px solid rgba(255,255,255,0.2)", borderRadius:8,
+          fontFamily:COND, fontSize:14, fontWeight:800, color:D("rgba(255,255,255,0.6)","rgba(255,255,255,0.9)"),
+          letterSpacing:"0.2em" }}>⊕ JUMP BALL</div>
       )}
 
-      {/* Shot Clock */}
-      <div style={{
-        textAlign:"center",
-        background: shotUrgent ? "rgba(200,0,0,0.18)" : "rgba(0,0,0,0.3)",
-        border: `2px solid ${shotUrgent ? "rgba(255,30,30,0.6)" : shotWarn ? "rgba(255,140,0,0.4)" : "rgba(0,232,122,0.25)"}`,
-        borderRadius:20, padding:"20px 28px", width:"85%",
-        boxShadow: shotUrgent ? "0 0 60px rgba(255,30,30,0.3)" : "none",
-        transition:"all .3s",
-      }}>
-        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-          letterSpacing:"0.4em", color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"), marginBottom:4 }}>SHOT CLOCK</div>
-        <div style={{
-          fontFamily:"'Bebas Neue',Impact,sans-serif", fontSize:130, lineHeight:0.85,
-          color: shotColor,
-          textShadow: shotUrgent ? "0 0 60px rgba(255,30,30,0.9)" : (theme.highContrast ? "none" : `0 0 40px ${shotColor}55`),
-          WebkitTextStroke: theme.highContrast ? "2px rgba(0,0,0,0.6)" : "0px transparent",
-          transition:"color .15s, text-shadow .15s",
-        }}>{fmtShot(shotClockTenths)}</div>
-        {/* Progress bar */}
-        <div style={{ height:3, background: D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)"), borderRadius:2,
-          overflow:"hidden", marginTop:10 }}>
-          <div style={{ height:"100%", borderRadius:2, transition:"width .1s linear",
-            width:`${Math.min(100,(shotClockTenths/120)*100)}%`,
-            background: shotColor }} />
-        </div>
-        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:700,
-          color: D("rgba(255,255,255,0.2)","rgba(255,255,255,0.7)"), letterSpacing:"0.2em", marginTop:6 }}>
-          {shotRunning ? "▶ RUNNING" : "■ STOPPED"}
-        </div>
+      {/* Game clock — the running match time */}
+      <div style={{ fontFamily:BEBAS, fontSize:64, lineHeight:1,
+        color: gameEnd ? "#FF3333" : isRunning ? "#FFF" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"),
+        textShadow: gameEnd ? "0 0 40px rgba(255,30,30,0.7)" : "none" }}>
+        {fmtClock(clockTenths)}
       </div>
 
-      {/* Game Clock */}
-      <div style={{ textAlign:"center" }}>
-        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-          letterSpacing:"0.4em", color: D("rgba(255,255,255,0.25)","rgba(255,255,255,0.85)") }}>GAME CLOCK</div>
-        <div style={{
-          fontFamily:"'Bebas Neue',Impact,sans-serif",
-          fontSize: clockTenths <= 600 ? 86 : 72,
-          lineHeight:1, color: clockColor,
-          textShadow: gameOver0 ? "0 0 60px rgba(255,0,0,0.8)" :
-                      isRunning ? "0 0 40px rgba(255,215,0,0.6)" : "none",
-          WebkitTextStroke: theme.highContrast ? "2px rgba(0,0,0,0.6)" : "0px transparent",
-          transition:"color .2s, text-shadow .2s",
-          letterSpacing:"0.02em",
-        }}>{fmtClock(clockTenths)}</div>
-        <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:14, fontWeight:800,
-          letterSpacing:"0.2em", marginTop:-2,
-          color: isRunning ? D("rgba(255,215,0,0.5)","rgba(255,215,0,0.9)") : D("rgba(255,255,255,0.15)","rgba(255,255,255,0.7)") }}>
-          {gameOver ? "■ FINAL" : isRunning ? "▶ LIVE" : "■ PAUSED"}
-        </div>
+      {/* Shot clock — the big broadcast-style number */}
+      <div style={{ fontFamily:BEBAS, fontSize:118, lineHeight:0.9, fontWeight:900, color:shotColor,
+        textShadow: shotUrgent ? "0 0 50px rgba(255,30,30,0.85)" : "none" }}>
+        {fmtShot(shotClockTenths)}
       </div>
 
-      {/* VS / Score separator */}
-      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:22, fontWeight:900,
-        letterSpacing:"0.3em", color: D("rgba(255,255,255,0.1)","rgba(255,255,255,0.5)") }}>VS</div>
+      <div style={{ fontFamily:COND, fontSize:13, fontWeight:700, letterSpacing:"0.3em",
+        color: D("rgba(255,255,255,0.2)","rgba(255,255,255,0.7)") }}>
+        #3X3BASKETBALL
+      </div>
 
+      {/* Possession dots */}
+      <div style={{ display:"flex", gap:14, marginTop:2 }}>
+        <div style={{ width:14, height:14, borderRadius:"50%",
+          background: possession === "teamA" ? teamA.color : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.3)"),
+          boxShadow: possession === "teamA" ? `0 0 10px ${teamA.color}` : "none" }}/>
+        <div style={{ width:14, height:14, borderRadius:"50%",
+          background: possession === "teamB" ? teamB.color : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.3)"),
+          boxShadow: possession === "teamB" ? `0 0 10px ${teamB.color}` : "none" }}/>
+      </div>
     </div>
   );
 }
@@ -289,7 +174,6 @@ export default function TvPage() {
     };
   }, [courtId]);
 
-  /* Court selector overlay (press C or click corner) / cycle theme (press D) */
   const [showSelector, setShowSelector] = useState(false);
   useEffect(() => {
     const h = e => {
@@ -300,20 +184,24 @@ export default function TvPage() {
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  const divisionId = searchParams.get("division") || "open";
+  const divConfig  = DIVISIONS.find(d => d.id === divisionId) || DIVISIONS[0];
+
   /* ─── Loading ────────────────────────────────────────────────────────────── */
   if (!state) return (
-    <div style={{ width:"100vw", height:"100vh", background:"#050505",
+    <div style={{ width:"100vw", height:"100vh", background:"#000",
       display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:24 }}>
       <div style={{ fontSize:72 }}>🏀</div>
-      <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:42, color:"#FFF", letterSpacing:"0.2em" }}>
+      <div style={{ fontFamily:BEBAS, fontSize:42, color:"#FFF", letterSpacing:"0.2em" }}>
         CONNECTING — COURT {courtId}
       </div>
-      <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:18, color:"rgba(255,255,255,0.25)",
-        letterSpacing:"0.2em" }}>
+      <div style={{ fontFamily:COND, fontSize:18, color:"rgba(255,255,255,0.3)", letterSpacing:"0.2em" }}>
         {connected ? "เชื่อมต่อแล้ว กำลังโหลด state..." : "กำลังเชื่อมต่อ server..."}
       </div>
     </div>
   );
+
+  const winTeam = state.winner === "teamA" ? state.teamA : state.winner === "teamB" ? state.teamB : null;
 
   return (
     <div style={{
@@ -326,69 +214,79 @@ export default function TvPage() {
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@700;800;900&display=swap');
         * { box-sizing:border-box; margin:0; padding:0; }
         @keyframes pulse-slow { 0%,100%{opacity:1} 50%{opacity:.4} }
-        @keyframes win-flash  { 0%,100%{opacity:1} 50%{opacity:.6} }
       `}</style>
 
-      {/* Top bar */}
+      {/* Top bar — minimal, monochrome, status only */}
       <div style={{
-        height:52, background:"rgba(0,0,0,0.7)", borderBottom: `1px solid ${theme.highContrast ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.04)"}`,
-        display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 32px", flexShrink:0,
+        height:44, background:"rgba(0,0,0,0.6)",
+        borderBottom:`1px solid ${theme.highContrast ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)"}`,
+        display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 28px", flexShrink:0,
       }}>
-        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-          <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:13, fontWeight:900,
-            letterSpacing:"0.45em", color: theme.highContrast ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.2)" }}>
-            3×3 BASKETBALL
-          </span>
-          {/* Win condition indicator */}
-          <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:11, fontWeight:700,
-            letterSpacing:"0.3em", color: theme.highContrast ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.12)" }}>
-            WIN AT 21 · SHOT CLOCK 12s
-          </span>
-        </div>
-
+        <span style={{ fontFamily:COND, fontSize:12, fontWeight:800, letterSpacing:"0.4em",
+          color: theme.highContrast ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)" }}>
+          3×3 BASKETBALL · WIN@21 · SHOT 12s
+        </span>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          {/* Court badge */}
-          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:16, letterSpacing:"0.2em",
-            color: theme.highContrast ? "rgba(255,255,255,0.75)" : "rgba(255,255,255,0.35)",
-            background: theme.highContrast ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
-            border: `1px solid ${theme.highContrast ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius:8, padding:"3px 14px" }}>
-            สนาม {courtId}
-          </div>
-          {/* Status dot */}
           <div style={{ display:"flex", alignItems:"center", gap:6,
-            color: connected ? (theme.highContrast ? "rgba(0,232,122,0.95)" : "rgba(0,232,122,0.55)") : (theme.highContrast ? "rgba(255,80,80,0.95)" : "rgba(255,80,80,0.55)"),
-            fontFamily:"'Barlow Condensed',sans-serif", fontSize:12, fontWeight:700, letterSpacing:"0.2em" }}>
-            <div style={{ width:7, height:7, borderRadius:"50%",
+            color: connected ? "rgba(0,232,122,0.8)" : "rgba(255,80,80,0.8)",
+            fontFamily:COND, fontSize:12, fontWeight:700, letterSpacing:"0.2em" }}>
+            <div style={{ width:6, height:6, borderRadius:"50%",
               background: connected ? "#00E87A" : "#FF5050",
-              boxShadow: connected ? "0 0 6px #00E87A" : "none",
-              animation: connected && state?.isRunning ? "pulse-slow 1.5s infinite" : "none",
-            }} />
-            {connected ? (state?.isRunning ? "LIVE" : "READY") : "OFFLINE"}
+              animation: connected && state.isRunning ? "pulse-slow 1.5s infinite" : "none" }}/>
+            {connected ? (state.isRunning ? "LIVE" : "READY") : "OFFLINE"}
           </div>
-          {/* Theme switcher */}
           <ThemeSwitcher themeId={themeId} setThemeId={setThemeId} />
-          {/* Corner hint */}
           <div onClick={() => setShowSelector(v=>!v)} style={{ cursor:"pointer",
-            fontFamily:"'Barlow Condensed',sans-serif", fontSize:10, color: theme.highContrast ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.1)",
+            fontFamily:COND, fontSize:10, color: theme.highContrast ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.15)",
             letterSpacing:"0.2em" }}>
             [C] สนาม
           </div>
         </div>
       </div>
 
-      {/* Main area */}
-      <div style={{ flex:1, display:"flex", overflow:"hidden" }}>
-        <TeamPanel team={state.teamA} tKey="teamA" state={state} flip={false} theme={theme} />
-        <CenterCol state={state} theme={theme} />
-        <TeamPanel team={state.teamB} tKey="teamB" state={state} flip={true} theme={theme} />
+      {/* Main scoreboard */}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
+        justifyContent:"center", gap:28, padding:"0 60px" }}>
+
+        {winTeam && (
+          <div style={{ padding:"10px 26px", background:"rgba(255,215,0,0.1)",
+            border:"2px solid rgba(255,215,0,0.45)", borderRadius:14, textAlign:"center" }}>
+            <span style={{ fontFamily:BEBAS, fontSize:26, color:"#FFD700", letterSpacing:"0.1em" }}>
+              🏆 {winTeam.name} WINS
+            </span>
+          </div>
+        )}
+        {state.isOvertime && !winTeam && (
+          <div style={{ padding:"4px 18px", background:"rgba(255,215,0,0.1)",
+            border:"1px solid rgba(255,215,0,0.4)", borderRadius:8,
+            fontFamily:COND, fontSize:14, fontWeight:800, color:"#FFD700", letterSpacing:"0.25em" }}>⚡ OVERTIME</div>
+        )}
+
+        {/* Names row */}
+        <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between", width:"100%", maxWidth:1400 }}>
+          <TeamName team={state.teamA} align="left"  hasBall={state.possession === "teamA"} />
+          <TeamName team={state.teamB} align="right" hasBall={state.possession === "teamB"} />
+        </div>
+
+        {/* Score + clock row */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", maxWidth:1400, gap:24 }}>
+          <ScoreBox team={state.teamA} theme={theme} />
+          <CenterClock state={state} courtId={courtId} divConfig={divConfig} theme={theme} />
+          <ScoreBox team={state.teamB} theme={theme} />
+        </div>
+
+        {/* Fouls row */}
+        <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", width:"100%", maxWidth:1400 }}>
+          <FoulsBox team={state.teamA} theme={theme} />
+          <FoulsBox team={state.teamB} theme={theme} />
+        </div>
       </div>
 
-      {/* Bottom bar — thin accent */}
-      <div style={{
-        height:6, flexShrink:0,
-        background:`linear-gradient(90deg, ${state.teamA.color}, rgba(255,255,255,0.2) 50%, ${state.teamB.color})`,
-        opacity: state.isRunning ? 1 : 0.3, transition:"opacity .5s",
-      }} />
+      {/* Bottom accent — thin team-color identifiers only */}
+      <div style={{ height:5, flexShrink:0, display:"flex" }}>
+        <div style={{ flex:1, background: state.teamA.color, opacity: state.isRunning ? 0.9 : 0.3, transition:"opacity .5s" }}/>
+        <div style={{ flex:1, background: state.teamB.color, opacity: state.isRunning ? 0.9 : 0.3, transition:"opacity .5s" }}/>
+      </div>
 
       {/* Court selector overlay (press C) */}
       {showSelector && (
@@ -400,17 +298,17 @@ export default function TvPage() {
             background:"#111", border:"1px solid #333", borderRadius:20, padding:"32px 40px",
             textAlign:"center",
           }}>
-            <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, letterSpacing:"0.2em",
+            <div style={{ fontFamily:BEBAS, fontSize:28, letterSpacing:"0.2em",
               color:"#FFF", marginBottom:20 }}>เลือกสนาม</div>
             <div style={{ display:"flex", gap:14 }}>
               {COURTS.map(c => (
-                <a key={c} href={`/tv?court=${c}`} style={{
+                <a key={c} href={`/tv?court=${c}&division=${divisionId}`} style={{
                   display:"block", width:80, height:80, borderRadius:16, lineHeight:"80px",
-                  fontFamily:"'Bebas Neue',sans-serif", fontSize:42, textDecoration:"none",
+                  fontFamily:BEBAS, fontSize:42, textDecoration:"none",
                   textAlign:"center",
-                  background: c === courtId ? "rgba(255,107,53,0.2)" : "rgba(255,255,255,0.04)",
-                  border: `2px solid ${c === courtId ? "#FF6B35" : "rgba(255,255,255,0.1)"}`,
-                  color: c === courtId ? "#FF6B35" : "rgba(255,255,255,0.5)",
+                  background: c === courtId ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
+                  border: `2px solid ${c === courtId ? "#FFF" : "rgba(255,255,255,0.1)"}`,
+                  color: c === courtId ? "#FFF" : "rgba(255,255,255,0.5)",
                 }}>{c}</a>
               ))}
             </div>

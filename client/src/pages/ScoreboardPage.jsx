@@ -4,7 +4,7 @@
  * Keyboard: SPACE=clock, C=shot, Z=12s, X=8s, H=horn, D=cycle theme
  */
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { socket } from "../socket.js";
 import { DIVISIONS, COURTS, RULES } from "../constants.js";
 import TournamentBridge from "../components/scoreboard/TournamentBridge.jsx";
@@ -92,7 +92,7 @@ function TeamCard({team,tKey,send,theme}){
       </div>
       {/* Score */}
       <div style={{textAlign:"center",padding:"4px 0"}}>
-        <div style={{...F,fontSize:110,fontWeight:900,lineHeight:.85,color,
+        <div className="score-value" style={{...F,fontSize:110,fontWeight:900,lineHeight:.85,color,
           textShadow:theme.highContrast?"none":`0 0 50px ${color}44`,
           WebkitTextStroke:theme.highContrast?"1.5px rgba(0,0,0,0.6)":"0px transparent"}}>{score}</div>
       </div>
@@ -205,7 +205,7 @@ function CenterPanel({state,send,onHorn,theme}){
         border:`2px solid ${shotUrg?"rgba(255,40,40,0.5)":shotWarn?"rgba(255,165,0,0.35)":D("rgba(255,255,255,0.07)","rgba(255,255,255,0.3)")}`,
         borderRadius:16,padding:"12px 12px 9px",boxShadow:shotUrg?"0 0 35px rgba(255,30,30,0.2)":"none",transition:"all .3s"}}>
         <div style={{...F,fontSize:9,letterSpacing:"0.45em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.85)"),textAlign:"center",marginBottom:2}}>SHOT CLOCK · 12s</div>
-        <div style={{textAlign:"center",...F,fontSize:110,fontWeight:900,lineHeight:.85,color:shotColor,
+        <div className="shotclock-value" style={{textAlign:"center",...F,fontSize:110,fontWeight:900,lineHeight:.85,color:shotColor,
           textShadow:shotUrg?"0 0 45px rgba(255,30,30,0.9)":(theme.highContrast?"none":`0 0 25px ${shotColor}44`),
           WebkitTextStroke:theme.highContrast?"1.5px rgba(0,0,0,0.6)":"0px transparent"}}>{fmtS(shotClockTenths)}</div>
         <div style={{height:2,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.25)"),borderRadius:2,overflow:"hidden",margin:"5px 0"}}>
@@ -239,14 +239,14 @@ function CenterPanel({state,send,onHorn,theme}){
 
       {/* Game clock */}
       <div style={{background:gameEnd?"rgba(255,0,0,0.25)":theme.boxBg,
-        border:gameEnd?"2px solid #FF0000":`1px solid ${D("rgba(255,215,0,0.14)","rgba(255,215,0,0.45)")}`,
+        border:gameEnd?"2px solid #FF0000":`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.3)")}`,
         borderRadius:14,padding:"10px 11px",boxShadow:gameEnd?"0 0 45px rgba(255,0,0,0.35)":"none",transition:"all .3s"}}>
-        <div style={{...F,fontSize:8,letterSpacing:"0.45em",color:gameEnd?"#FF9999":D("rgba(255,215,0,0.5)","rgba(255,215,0,0.9)"),textAlign:"center",marginBottom:3}}>GAME CLOCK · 10 MIN</div>
-        <div style={{textAlign:"center",...F,fontSize:clockTenths<=600?54:46,fontWeight:900,lineHeight:1,
-          color:gameEnd?"#FF0000":isRunning?"#FFD700":D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),
-          textShadow:gameEnd?"0 0 35px #FF0000":isRunning?"0 0 28px rgba(255,215,0,0.55)":"none",
+        <div style={{...F,fontSize:8,letterSpacing:"0.45em",color:gameEnd?"#FF9999":D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"),textAlign:"center",marginBottom:3}}>GAME CLOCK · 10 MIN</div>
+        <div className="gameclock-value" style={{textAlign:"center",...F,fontSize:clockTenths<=600?54:46,fontWeight:900,lineHeight:1,
+          color:gameEnd?"#FF0000":D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),
+          textShadow:gameEnd?"0 0 35px #FF0000":"none",
           WebkitTextStroke:theme.highContrast?"1.5px rgba(0,0,0,0.5)":"0px transparent",transition:"all .2s"}}>{fmt(clockTenths)}</div>
-        <div style={{...F,fontSize:10,letterSpacing:"0.3em",color:isRunning?D("rgba(255,215,0,0.55)","rgba(255,215,0,0.9)"):D("rgba(255,255,255,0.18)","rgba(255,255,255,0.7)"),textAlign:"center",marginBottom:5}}>
+        <div style={{...F,fontSize:10,letterSpacing:"0.3em",color:isRunning?D("rgba(0,232,122,0.55)","rgba(0,232,122,0.9)"):D("rgba(255,255,255,0.18)","rgba(255,255,255,0.7)"),textAlign:"center",marginBottom:5}}>
           {gameOver?"■ GAME OVER":isRunning?"▶ LIVE":"■ PAUSED"}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:5}}>
@@ -275,7 +275,7 @@ function CenterPanel({state,send,onHorn,theme}){
       {/* Horn */}
       <button onClick={onHorn}
         style={Btn({width:"100%",padding:"11px 0",fontSize:17,letterSpacing:"0.1em",
-          background:theme.highContrast?"rgba(255,165,0,0.28)":"rgba(255,165,0,0.13)",border:"2px solid rgba(255,165,0,0.45)",color:"#FFA500"})}>
+          background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`2px solid ${D("rgba(255,255,255,0.12)","rgba(255,255,255,0.4)")}`,color:D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)")})}>
         📢 SOUND HORN <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[H]</span>
       </button>
 
@@ -304,6 +304,7 @@ function CenterPanel({state,send,onHorn,theme}){
 
 export default function ScoreboardPage(){
   const [sp]           = useSearchParams();
+  const nav            = useNavigate();
   const courtId        = (sp.get("court")||"A").toUpperCase();
   const divisionId     = sp.get("division")||"open";
   const divConfig      = DIVISIONS.find(d=>d.id===divisionId)||DIVISIONS[0];
@@ -355,14 +356,39 @@ export default function ScoreboardPage(){
 
   return(
     <div onClick={unlock} style={{minHeight:"100vh",background:theme.mainBg,padding:10}}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');button,select{font-family:'Bebas Neue',Impact,sans-serif;outline:none;}*{box-sizing:border-box;margin:0;padding:0;}`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+        button,select{font-family:'Bebas Neue',Impact,sans-serif;outline:none;}
+        *{box-sizing:border-box;margin:0;padding:0;}
+        .back-btn{display:inline-flex;align-items:center;gap:7px;min-height:38px;
+          padding:8px 16px;border-radius:10px;background:rgba(255,255,255,0.06);
+          border:1.5px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.85);
+          font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:0.1em;
+          cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent;}
+        .back-btn:hover,.back-btn:active{background:rgba(255,107,53,0.18);
+          border-color:rgba(255,107,53,0.55);color:#FF6B35;}
+        .control-grid{display:grid;grid-template-columns:1fr 270px 1fr;gap:9px;
+          max-width:1380px;margin:0 auto;}
+        @media (max-width:900px){
+          .control-grid{grid-template-columns:1fr;max-width:600px;}
+          .control-center{order:-1;}
+        }
+        .pill-btn{display:inline-flex;align-items:center;justify-content:center;}
+        @media (max-width:600px){
+          .back-btn{padding:10px 16px;font-size:15px;}
+          .pill-btn{padding:8px 13px !important;font-size:13px !important;min-height:34px;}
+          .score-value{font-size:76px !important;}
+          .shotclock-value{font-size:76px !important;}
+          .gameclock-value{font-size:42px !important;}
+        }
+      `}</style>
 
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9,flexWrap:"wrap",gap:6}}>
         <div>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:"0.2em",
-            background:`linear-gradient(90deg,${divConfig.color},#FFD700 50%,#00D4FF)`,
-            WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+          <button className="back-btn" onClick={()=>nav("/")} aria-label="กลับหน้าหลัก">← กลับหน้าหลัก</button>
+          <div style={{marginTop:6,fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:"0.2em",
+            color:"rgba(255,255,255,0.92)"}}>
             3x3 BASKETBALL · สนาม {courtId}
           </div>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",color:divConfig.color,fontSize:9,letterSpacing:"0.35em"}}>
@@ -372,7 +398,7 @@ export default function ScoreboardPage(){
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
           {/* Court selector */}
           {COURTS.map(c=>(
-            <a key={c} href={`/scoreboard?court=${c}&division=${divisionId}`}
+            <a key={c} href={`/scoreboard?court=${c}&division=${divisionId}`} className="pill-btn"
               style={{padding:"3px 9px",borderRadius:7,fontFamily:"'Bebas Neue',sans-serif",fontSize:12,
                 background:c===courtId?`${divConfig.color}22`:"rgba(255,255,255,0.04)",
                 border:`1px solid ${c===courtId?divConfig.color+"55":"rgba(255,255,255,0.1)"}`,
@@ -380,17 +406,17 @@ export default function ScoreboardPage(){
           ))}
           {/* Division selector */}
           {DIVISIONS.map(d=>(
-            <a key={d.id} href={`/scoreboard?court=${courtId}&division=${d.id}`}
+            <a key={d.id} href={`/scoreboard?court=${courtId}&division=${d.id}`} className="pill-btn"
               style={{padding:"3px 9px",borderRadius:7,fontFamily:"'Bebas Neue',sans-serif",fontSize:10,
                 background:d.id===divisionId?`${d.color}22`:"rgba(255,255,255,0.04)",
                 border:`1px solid ${d.id===divisionId?d.color+"55":"rgba(255,255,255,0.08)"}`,
                 color:d.id===divisionId?d.color:"rgba(255,255,255,0.25)",textDecoration:"none"}}>{d.label}</a>
           ))}
           {/* TV & Overlay links */}
-          <a href={`/tv?court=${courtId}`} target="_blank"
+          <a href={`/tv?court=${courtId}`} target="_blank" className="pill-btn"
             style={{padding:"3px 9px",borderRadius:7,fontFamily:"'Bebas Neue',sans-serif",fontSize:10,
-              background:"rgba(167,139,250,0.1)",border:"1px solid rgba(167,139,250,0.3)",
-              color:"#A78BFA",textDecoration:"none"}}>📺 TV</a>
+              background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.12)",
+              color:"rgba(255,255,255,0.55)",textDecoration:"none"}}>📺 TV</a>
           {/* Theme switcher */}
           <ThemeSwitcher themeId={themeId} setThemeId={setThemeId} />
           {/* Status */}
@@ -402,7 +428,7 @@ export default function ScoreboardPage(){
             <div style={{width:5,height:5,borderRadius:"50%",background:conn?"#00E87A":"#FF5555"}}/>
             {conn?"LIVE":"OFFLINE"}
           </div>
-          <button onClick={()=>{if(window.confirm("Reset เกมนี้?"))send("resetGame");}}
+          <button onClick={()=>{if(window.confirm("Reset เกมนี้?"))send("resetGame");}} className="pill-btn"
             style={{padding:"3px 10px",borderRadius:100,background:"rgba(255,55,55,0.07)",
               border:"1px solid rgba(255,55,55,0.22)",color:"#FF7070",
               fontFamily:"'Bebas Neue',sans-serif",fontSize:10,cursor:"pointer"}}>↺ RESET</button>
@@ -412,10 +438,12 @@ export default function ScoreboardPage(){
       {/* Tournament Bridge */}
       <TournamentBridge state={state} send={send} divisionId={divisionId} courtId={courtId}/>
 
-      {/* Main 3-column grid */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 270px 1fr",gap:9,maxWidth:1380,margin:"0 auto"}}>
+      {/* Main 3-column grid — stacks to 1 column on narrow screens, clock panel first */}
+      <div className="control-grid">
         <TeamCard team={state.teamA} tKey="teamA" send={send} theme={theme}/>
-        <CenterPanel state={state} send={send} onHorn={playHorn} theme={theme}/>
+        <div className="control-center">
+          <CenterPanel state={state} send={send} onHorn={playHorn} theme={theme}/>
+        </div>
         <TeamCard team={state.teamB} tKey="teamB" send={send} theme={theme}/>
       </div>
     </div>
