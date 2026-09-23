@@ -170,11 +170,11 @@ function handleAction(cid, { type, team, value }) {
       }
       case "clockSet":      stopGame(cid, s); s.clockTenths = Math.max(0, toInt(value) * 10); break;
       case "shotClockToggle": s.shotRunning ? stopShot(cid, s) : startShot(cid, s); break;
-      case "shotClockSet":  stopShot(cid, s); s.shotClockTenths = Math.max(0, clamp(toInt(value ?? 12), 0, 60) * 10); break;
+      case "shotClockSet":  stopShot(cid, s); s.shotClockTenths = clamp(toInt(value ?? 12), 0, 12) * 10; break;
       case "shotClockAdjust": {
         const d = clamp(toInt(value), -120, 120);
-        if (s.shotRunning && scMeta[cid]) scMeta[cid].startTenths = Math.max(0, scMeta[cid].startTenths + d);
-        s.shotClockTenths = Math.max(0, s.shotClockTenths + d); break;
+        if (s.shotRunning && scMeta[cid]) scMeta[cid].startTenths = clamp(scMeta[cid].startTenths + d, 0, SHOT_DEFAULT);
+        s.shotClockTenths = clamp(s.shotClockTenths + d, 0, SHOT_DEFAULT); break;
       }
       case "teamFoul":      if (!isTeam(team)) throw new Error(`bad team`); s[team].teamFouls = Math.max(0, s[team].teamFouls + clamp(toInt(value), -10, 10)); break;
       case "teamFoulReset": isTeam(team) ? (s[team].teamFouls = 0) : (s.teamA.teamFouls = s.teamB.teamFouls = 0); break;
