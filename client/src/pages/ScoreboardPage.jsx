@@ -374,7 +374,7 @@ export default function ScoreboardPage(){
         .more-toggle{display:none;}
         .more-panel{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
         .mobile-tabs{display:none;}
-        .control-grid{display:grid;grid-template-columns:1fr 270px 1fr;gap:9px;
+        .control-grid{display:grid;grid-template-columns:1fr 380px 1fr;gap:9px;
           max-width:1380px;margin:0 auto;width:100%;}
         .pill-btn{display:inline-flex;align-items:center;justify-content:center;}
         @media (max-width:900px){
