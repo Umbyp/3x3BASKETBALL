@@ -100,12 +100,12 @@ function TeamCard({team,tKey,send,theme}){
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:5,padding:"0 12px 10px"}}>
         {[1,2].map(v=>(
           <button key={v} onClick={()=>send("score",tKey,v)}
-            style={{...F,fontSize:20,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
-              color:D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),padding:"10px 0",borderRadius:9,cursor:"pointer"}}>+{v}</button>
+            style={{...F,fontSize:30,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
+              color:D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),padding:"13px 0",borderRadius:9,cursor:"pointer"}}>+{v}</button>
         ))}
         <button onClick={()=>send("score",tKey,-1)}
-          style={{...F,fontSize:20,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
-            color:D("rgba(255,120,120,0.75)","rgba(255,120,120,0.95)"),padding:"10px 0",borderRadius:9,cursor:"pointer"}}>-1</button>
+          style={{...F,fontSize:30,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`1px solid ${D("rgba(255,255,255,0.1)","rgba(255,255,255,0.35)")}`,
+            color:D("rgba(255,120,120,0.75)","rgba(255,120,120,0.95)"),padding:"13px 0",borderRadius:9,cursor:"pointer"}}>-1</button>
       </div>
       <div style={{height:1,background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.2)"),margin:"0 12px"}}/>
       {/* Fouls */}
