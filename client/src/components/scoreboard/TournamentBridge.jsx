@@ -28,7 +28,7 @@ export default function TournamentBridge({ state, send, divisionId, courtId }) {
     if(!sel||!data||!db) return;
     setStatus("saving");
     try{
-      const isGrp = sel.id < 100;
+      const isGrp = sel.round === 1;
       const arr   = isGrp ? data.groupMatches : data.koMatches;
       const idx   = arr.findIndex(m=>m.id===sel.id);
       if(idx===-1) throw new Error("not found");

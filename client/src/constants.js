@@ -18,37 +18,13 @@ export const DEFAULT_TEAMS = {
   u18:   { A:["TEAM A1","TEAM A2","TEAM A3","TEAM A4"], B:["TEAM B1","TEAM B2","TEAM B3","TEAM B4"] },
   u15:   { A:["TEAM A1","TEAM A2","TEAM A3","TEAM A4"], B:["TEAM B1","TEAM B2","TEAM B3","TEAM B4"] },
 };
-export const KO_TEMPLATE = {
-  open:[
-    {id:100,round:2,shortLabel:"QF1",home:"1A",away:"2C",homeScore:null,awayScore:null,played:false},
-    {id:101,round:2,shortLabel:"QF2",home:"1D",away:"2B",homeScore:null,awayScore:null,played:false},
-    {id:102,round:2,shortLabel:"QF3",home:"1B",away:"2D",homeScore:null,awayScore:null,played:false},
-    {id:103,round:2,shortLabel:"QF4",home:"1C",away:"2A",homeScore:null,awayScore:null,played:false},
-    {id:200,round:3,shortLabel:"SF1",home:"W-QF1",away:"W-QF2",homeScore:null,awayScore:null,played:false},
-    {id:201,round:3,shortLabel:"SF2",home:"W-QF3",away:"W-QF4",homeScore:null,awayScore:null,played:false},
-    {id:300,round:4,shortLabel:"3rd",home:"L-SF1",away:"L-SF2",homeScore:null,awayScore:null,played:false},
-    {id:301,round:4,shortLabel:"FINAL",home:"W-SF1",away:"W-SF2",homeScore:null,awayScore:null,played:false},
-  ],
-  women:[
-    {id:200,round:3,shortLabel:"SF1",home:"1A",away:"2B",homeScore:null,awayScore:null,played:false},
-    {id:201,round:3,shortLabel:"SF2",home:"1B",away:"2A",homeScore:null,awayScore:null,played:false},
-    {id:300,round:4,shortLabel:"3rd",home:"L-SF1",away:"L-SF2",homeScore:null,awayScore:null,played:false},
-    {id:301,round:4,shortLabel:"FINAL",home:"W-SF1",away:"W-SF2",homeScore:null,awayScore:null,played:false},
-  ],
-  u18:[
-    {id:200,round:3,shortLabel:"SF1",home:"1A",away:"2B",homeScore:null,awayScore:null,played:false},
-    {id:201,round:3,shortLabel:"SF2",home:"1B",away:"2A",homeScore:null,awayScore:null,played:false},
-    {id:301,round:4,shortLabel:"FINAL",home:"W-SF1",away:"W-SF2",homeScore:null,awayScore:null,played:false},
-  ],
-  u15:[
-    {id:200,round:3,shortLabel:"SF1",home:"1A",away:"2B",homeScore:null,awayScore:null,played:false},
-    {id:201,round:3,shortLabel:"SF2",home:"1B",away:"2A",homeScore:null,awayScore:null,played:false},
-    {id:301,round:4,shortLabel:"FINAL",home:"W-SF1",away:"W-SF2",homeScore:null,awayScore:null,played:false},
-  ],
-};
 export const getDivision = id => DIVISIONS.find(d=>d.id===id)||DIVISIONS[0];
 export function generateGroupMatches(teams) {
-  const m=[]; let id=1;
+  // ids start at 2000 so they never collide with the legacy MATCH_SCHEDULE
+  // lookup table in TournamentPage.jsx (hardcoded keys 1-24, 100-301) — a
+  // dynamically (re)generated tournament's matches would otherwise pick up
+  // stale hand-scheduled dates/courts purely by numeric coincidence.
+  const m=[]; let id=2000;
   Object.entries(teams).forEach(([g,ts])=>{
     for(let i=0;i<ts.length;i++) for(let j=i+1;j<ts.length;j++)
       m.push({id:id++,round:1,group:g,home:ts[i],away:ts[j],homeScore:null,awayScore:null,played:false,court:null,time:""});

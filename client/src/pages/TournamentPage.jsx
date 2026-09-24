@@ -11,8 +11,9 @@ import { db } from "../firebase.js";
 import { ref, onValue, update, set } from "firebase/database";
 import {
   DIVISIONS, GROUP_COLORS, DEFAULT_TEAMS,
-  KO_TEMPLATE, generateGroupMatches, getDivision,
+  generateGroupMatches, getDivision,
 } from "../constants.js";
+import { generateKoBracket } from "../lib/bracketGen.js";
 
 const checkAdmin = pw => pw === (import.meta.env.VITE_ADMIN_PASS || "admin1234");
 
@@ -144,8 +145,9 @@ function calcStandings(teams, matches) {
 
 function resolveKo(code, standings, resolved) {
   if (!code) return code;
-  if (/^[1-4][A-D]$/.test(code)) {
-    const r = parseInt(code[0])-1, g = code[1];
+  const rankMatch = /^([12])(.+)$/.exec(code);
+  if (rankMatch) {
+    const r = parseInt(rankMatch[1])-1, g = rankMatch[2];
     return standings[g]?.[r]?.team || code;
   }
   if (code.includes("-")) {
@@ -488,12 +490,13 @@ function ScoreModal({ match, onClose, onSave }) {
 }
 
 // ── Standings Tab ─────────────────────────────────────────────────────────────
+const GROUP_PALETTE = ["#f59e0b","#3b82f6","#10b981","#a855f7","#ec4899","#14b8a6","#eab308","#f43f5e"];
 function Standings({ standings, divCfg }) {
   return (
     <div className="space-y-5">
-      {Object.entries(standings).map(([g, teams]) => {
+      {Object.entries(standings).map(([g, teams], gi) => {
         const gc = GROUP_COLORS[g] || GROUP_COLORS.A;
-        const borderColor = g==="A"?"#f59e0b":g==="B"?"#3b82f6":g==="C"?"#10b981":"#a855f7";
+        const borderColor = GROUP_PALETTE[gi % GROUP_PALETTE.length];
         return (
           <div key={g} className="border rounded-2xl overflow-hidden bg-gray-900" style={{borderLeftWidth:4,borderLeftColor:borderColor,borderColor:"rgb(31,41,55)"}}>
             <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-800">
@@ -673,18 +676,38 @@ function Bracket({ koMatches, isAdmin, onEdit, onReset }) {
       </div>
     );
   };
-  const qf=koMatches.filter(m=>m.round===2), sf=koMatches.filter(m=>m.round===3), fn=koMatches.filter(m=>m.round===4);
+  if (!koMatches.length) {
+    return <p className="text-center text-gray-700 py-10 text-sm px-6">ยังไม่มีสาย Knockout — ไปที่แท็บ "จัดการทีม" ตั้งอย่างน้อย 2 กลุ่ม แล้วกด "สร้างสายการแข่งใหม่"</p>;
+  }
+  const rounds = {};
+  koMatches.forEach(m => { (rounds[m.round] ||= []).push(m); });
+  const roundNums = Object.keys(rounds).map(Number).sort((a,b)=>a-b);
+  const maxRound = roundNums[roundNums.length-1];
+  const MT = ["","mt-8","mt-16","mt-24","mt-32","mt-40"]; // static classes so Tailwind JIT picks them up
   return (
     <div className="overflow-x-auto pb-6">
       <div className="text-[9px] text-gray-600 text-center mb-2 animate-pulse">← เลื่อนดูสาย →</div>
       <div className="flex items-start gap-8 min-w-max pt-2">
-        {qf.length>0&&<div className="flex flex-col gap-4"><p className="text-[9px] font-black text-gray-600 uppercase text-center">QF</p>{qf.map(m=><MC key={m.id} m={m}/>)}</div>}
-        {sf.length>0&&<div className={`flex flex-col gap-4 ${qf.length>0?"mt-8":""}`}><p className="text-[9px] font-black text-gray-600 uppercase text-center">SF</p>{sf.map(m=><MC key={m.id} m={m}/>)}</div>}
-        {fn.length>0&&<div className={`flex flex-col gap-4 ${sf.length>0?"mt-16":""}`}>
-          <p className="text-[9px] font-black text-gray-600 uppercase text-center">FINAL</p>
-          {fn.filter(m=>m.shortLabel==="FINAL").map(m=>(<div key={m.id}><p className="text-[9px] text-yellow-500 font-black text-center mb-1 animate-pulse">🏆 Grand Final</p><MC m={m}/></div>))}
-          {fn.filter(m=>m.shortLabel==="3rd").map(m=>(<div key={m.id} className="opacity-60 mt-4"><p className="text-[9px] text-gray-600 text-center mb-1">3rd</p><MC m={m}/></div>))}
-        </div>}
+        {roundNums.map((rn, ci) => {
+          const ms = rounds[rn];
+          const marginCls = MT[Math.min(ci, MT.length-1)];
+          if (rn === maxRound) {
+            return (
+              <div key={rn} className={`flex flex-col gap-4 ${marginCls}`}>
+                <p className="text-[9px] font-black text-gray-600 uppercase text-center">FINAL</p>
+                {ms.filter(m=>m.shortLabel==="FINAL").map(m=>(<div key={m.id}><p className="text-[9px] text-yellow-500 font-black text-center mb-1 animate-pulse">🏆 Grand Final</p><MC m={m}/></div>))}
+                {ms.filter(m=>m.shortLabel==="3rd").map(m=>(<div key={m.id} className="opacity-60 mt-4"><p className="text-[9px] text-gray-600 text-center mb-1">3rd</p><MC m={m}/></div>))}
+              </div>
+            );
+          }
+          const stageLabel = ms[0]?.stageLabel || ms[0]?.shortLabel?.replace(/\d+$/,"") || "";
+          return (
+            <div key={rn} className={`flex flex-col gap-4 ${marginCls}`}>
+              <p className="text-[9px] font-black text-gray-600 uppercase text-center">{stageLabel}</p>
+              {ms.map(m=><MC key={m.id} m={m}/>)}
+            </div>
+          );
+        })}
       </div>
       <div className="mt-5 bg-gray-900/50 border border-gray-800 rounded-2xl p-4">
         <p className="font-black text-white text-xs mb-3 uppercase tracking-wider">🏆 เงินรางวัล</p>
@@ -694,6 +717,81 @@ function Bracket({ koMatches, isAdmin, onEdit, onReset }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── ✅ Manage Teams Tab (admin) — edit teams/groups, then regenerate the bracket ─
+function nextGroupLetter(existing) {
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(65+i);
+    if (!existing.includes(letter)) return letter;
+  }
+  return `G${existing.length+1}`;
+}
+
+function ManageTeams({ teams, onRegenerate }) {
+  const [local, setLocal] = useState(() => JSON.parse(JSON.stringify(teams||{})));
+  useEffect(()=>{ setLocal(JSON.parse(JSON.stringify(teams||{}))); }, [teams]);
+
+  const groups = Object.keys(local).sort();
+
+  const renameTeam = (g,i,val) => setLocal(prev=>({...prev,[g]:prev[g].map((t,idx)=>idx===i?val:t)}));
+  const removeTeam = (g,i) => setLocal(prev=>({...prev,[g]:prev[g].filter((_,idx)=>idx!==i)}));
+  const addTeam    = g => setLocal(prev=>({...prev,[g]:[...prev[g],""]}));
+  const addGroup   = () => setLocal(prev=>({...prev,[nextGroupLetter(Object.keys(prev))]:[]}));
+  const removeGroup= g => {
+    if (local[g]?.length && !window.confirm(`ลบกลุ่ม ${g} พร้อมทีมทั้งหมดในกลุ่ม?`)) return;
+    setLocal(prev=>{ const n={...prev}; delete n[g]; return n; });
+  };
+
+  const emptyTeamNames = groups.some(g=>local[g].some(t=>!t.trim()));
+  const tooFewGroups = groups.length < 2;
+  const tooFewTeams = groups.some(g=>local[g].length < 2);
+  const canRegen = !emptyTeamNames && !tooFewGroups && !tooFewTeams;
+
+  const regen = () => {
+    if (!canRegen) return;
+    if (!window.confirm("สร้างสายการแข่งใหม่จะรีเซ็ตผลการแข่งขันทั้งหมดของรุ่นนี้ ยืนยัน?")) return;
+    onRegenerate(local);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 text-xs text-yellow-400">
+        ⚠️ แก้ทีม/กลุ่มที่นี่ แล้วกด "สร้างสายการแข่งใหม่" ด้านล่าง — การสร้างใหม่จะรีเซ็ตผลการแข่งขันทั้งหมดของรุ่นนี้ (ตารางเวลา/สนามของแมทช์ใหม่จะยังไม่กำหนดไว้)
+      </div>
+
+      {groups.map(g => (
+        <div key={g} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-black text-white tracking-widest">Group {g}</span>
+            <button onClick={()=>removeGroup(g)} className="text-[10px] text-rose-500 font-bold hover:text-rose-400">ลบกลุ่มนี้</button>
+          </div>
+          <div className="space-y-2">
+            {local[g].map((t,i)=>(
+              <div key={i} className="flex gap-2">
+                <input value={t} onChange={e=>renameTeam(g,i,e.target.value)} placeholder="ชื่อทีม"
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-orange-500"/>
+                <button onClick={()=>removeTeam(g,i)} className="px-3 rounded-lg bg-gray-800 border border-gray-700 text-rose-500 text-xs font-bold hover:border-rose-500/50">✕</button>
+              </div>
+            ))}
+          </div>
+          <button onClick={()=>addTeam(g)} className="mt-2 w-full py-2 rounded-lg border border-dashed border-gray-700 text-xs text-gray-500 hover:text-gray-300 hover:border-gray-500">+ เพิ่มทีม</button>
+        </div>
+      ))}
+
+      <button onClick={addGroup} className="w-full py-3 rounded-xl border border-dashed border-gray-700 text-sm text-gray-400 hover:text-white hover:border-gray-500 font-bold">+ เพิ่มกลุ่ม</button>
+
+      {!canRegen && (
+        <p className="text-xs text-rose-400 text-center">
+          {tooFewGroups?"ต้องมีอย่างน้อย 2 กลุ่มถึงจะสร้างสาย Knockout ได้":tooFewTeams?"แต่ละกลุ่มต้องมีอย่างน้อย 2 ทีม":"กรอกชื่อทีมให้ครบทุกช่อง"}
+        </p>
+      )}
+      <button disabled={!canRegen} onClick={regen}
+        className="w-full py-3.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-600 text-white text-sm font-black uppercase tracking-widest transition-all">
+        🔄 สร้างสายการแข่งใหม่
+      </button>
     </div>
   );
 }
@@ -724,7 +822,7 @@ export default function TournamentPage() {
         const teams = DEFAULT_TEAMS[divId] || DEFAULT_TEAMS.open;
         set(ref(db, `tournament_data/${divId}`), {
           teams, groupMatches: generateGroupMatches(teams),
-          koMatches: KO_TEMPLATE[divId] || KO_TEMPLATE.open, delayMinutes: 0,
+          koMatches: generateKoBracket(teams), delayMinutes: 0,
         });
       }
       setLoad(false);
@@ -751,7 +849,7 @@ export default function TournamentPage() {
   const liveCount= allMatches.filter(m => !m.played && (isMatchLive(m.id, now, delayMinutes) || (m.homeScore !== null && m.homeScore !== undefined))).length;
 
   const saveScore = (id, h, a) => {
-    const isG=id<100, arr=isG?data.groupMatches:data.koMatches, idx=arr.findIndex(m=>m.id===id);
+    const isG=(data.groupMatches||[]).some(m=>m.id===id), arr=isG?data.groupMatches:data.koMatches, idx=arr.findIndex(m=>m.id===id);
     update(ref(db), {
       [`tournament_data/${divId}/${isG?"groupMatches":"koMatches"}/${idx}/homeScore`]:h,
       [`tournament_data/${divId}/${isG?"groupMatches":"koMatches"}/${idx}/awayScore`]:a,
@@ -759,7 +857,7 @@ export default function TournamentPage() {
     }).then(()=>setToast({message:"✅ บันทึกแล้ว",type:"success"}));
   };
   const resetScore = id => {
-    const isG=id<100, arr=isG?data.groupMatches:data.koMatches, idx=arr.findIndex(m=>m.id===id);
+    const isG=(data.groupMatches||[]).some(m=>m.id===id), arr=isG?data.groupMatches:data.koMatches, idx=arr.findIndex(m=>m.id===id);
     update(ref(db), {
       [`tournament_data/${divId}/${isG?"groupMatches":"koMatches"}/${idx}/homeScore`]:null,
       [`tournament_data/${divId}/${isG?"groupMatches":"koMatches"}/${idx}/awayScore`]:null,
@@ -770,6 +868,14 @@ export default function TournamentPage() {
     update(ref(db),{[`tournament_data/${divId}/delayMinutes`]:mins})
       .then(()=>setToast({message:`⏰ เลื่อน +${mins} นาที`,type:"info"}));
   };
+  const regenerateBracket = newTeams => {
+    const groupMatches = generateGroupMatches(newTeams);
+    const koMatches = generateKoBracket(newTeams);
+    set(ref(db, `tournament_data/${divId}`), {
+      teams: newTeams, groupMatches, koMatches, delayMinutes: data?.delayMinutes ?? 0,
+    }).then(()=>{ setToast({message:"🔄 สร้างสายการแข่งใหม่แล้ว",type:"success"}); setTab("standings"); });
+  };
+  const logout = () => { setAdmin(false); if (tab==="teams") setTab("standings"); };
 
   if (!db) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-6">
@@ -837,7 +943,7 @@ export default function TournamentPage() {
             <>
               <div className="mt-3 pt-3 border-t border-gray-800 flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded text-[9px] font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">ADMIN</span>
-                <button onClick={()=>setAdmin(false)} className="ml-auto text-[9px] text-gray-500 hover:text-white font-bold">Logout</button>
+                <button onClick={logout} className="ml-auto text-[9px] text-gray-500 hover:text-white font-bold">Logout</button>
               </div>
               <DelayControl delayMinutes={delayMinutes} onSave={saveDelay}/>
             </>
@@ -847,7 +953,7 @@ export default function TournamentPage() {
 
       <div className="sticky top-0 z-20 bg-[#050505]/90 backdrop-blur border-b border-gray-800 mb-5">
         <div className="max-w-xl mx-auto flex">
-          {[["standings","📊","Table"],["schedule","📅","Matches"],["bracket","⚡","Bracket"]].map(([v,ic,l])=>(
+          {[["standings","📊","Table"],["schedule","📅","Matches"],["bracket","⚡","Bracket"],...(isAdmin?[["teams","👥","Teams"]]:[])].map(([v,ic,l])=>(
             <button key={v} onClick={()=>setTab(v)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-3.5 text-xs font-bold tracking-widest uppercase relative transition-all ${tab===v?"text-orange-400":"text-gray-600 hover:text-gray-400"}`}>
               {tab===v&&<div className="absolute bottom-0 inset-x-0 h-0.5 bg-orange-500"/>}
@@ -862,10 +968,11 @@ export default function TournamentPage() {
         <AnimatedTab active={tab==="standings"}><Standings standings={standings} divCfg={divCfg}/></AnimatedTab>
         <AnimatedTab active={tab==="schedule"}><Schedule matches={allMatches} isAdmin={isAdmin} onEdit={setModal} onReset={resetScore} now={now} delayMinutes={delayMinutes}/></AnimatedTab>
         <AnimatedTab active={tab==="bracket"}><Bracket koMatches={resolvedKo} isAdmin={isAdmin} onEdit={setModal} onReset={resetScore}/></AnimatedTab>
+        {isAdmin && <AnimatedTab active={tab==="teams"}><ManageTeams teams={data.teams} onRegenerate={regenerateBracket}/></AnimatedTab>}
       </main>
 
       <footer className="text-center py-10">
-        <button onClick={()=>isAdmin?setAdmin(false):setLogin(true)}
+        <button onClick={()=>isAdmin?logout():setLogin(true)}
           className={`text-[10px] font-bold uppercase tracking-widest ${isAdmin?"text-orange-400":"text-gray-800 hover:text-gray-600 transition-colors"}`}>
           {isAdmin?"● Admin Mode":"Admin"}
         </button>
