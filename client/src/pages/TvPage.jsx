@@ -35,18 +35,18 @@ const COND  = "'Barlow Condensed',sans-serif";
 /* ─── Team name row ────────────────────────────────────────────────────────── */
 function TeamName({ team, align, hasBall }) {
   const nl = team.name.length;
-  const fs = nl <= 10 ? 46 : nl <= 16 ? 36 : 26;
+  const fs = nl <= 10 ? 66 : nl <= 16 ? 50 : 36;
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:6,
+    <div style={{ display:"flex", flexDirection:"column", gap:8,
       alignItems: align === "left" ? "flex-start" : "flex-end" }}>
-      <div style={{ height:20, display:"flex", alignItems:"center", gap:8,
+      <div style={{ height:26, display:"flex", alignItems:"center", gap:8,
         flexDirection: align === "left" ? "row" : "row-reverse" }}>
         {hasBall && (
-          <span style={{ display:"flex", alignItems:"center", gap:6,
+          <span style={{ display:"flex", alignItems:"center", gap:8,
             flexDirection: align === "left" ? "row" : "row-reverse" }}>
-            <span style={{ width:8, height:8, borderRadius:"50%", background: team.color,
-              boxShadow:`0 0 8px ${team.color}` }}/>
-            <span style={{ fontFamily:COND, fontSize:13, fontWeight:800, letterSpacing:"0.25em",
+            <span style={{ width:11, height:11, borderRadius:"50%", background: team.color,
+              boxShadow:`0 0 10px ${team.color}` }}/>
+            <span style={{ fontFamily:COND, fontSize:17, fontWeight:800, letterSpacing:"0.25em",
               color: team.color }}>BALL</span>
           </span>
         )}
@@ -64,11 +64,11 @@ function ScoreBox({ team, theme }) {
   const D = (dim, bright) => (theme.highContrast ? bright : dim);
   return (
     <div style={{
-      width:230, height:180, display:"flex", alignItems:"center", justifyContent:"center",
-      border:`4px solid ${D("rgba(255,255,255,0.7)","#FFFFFF")}`, borderRadius:16,
+      width:330, height:260, display:"flex", alignItems:"center", justifyContent:"center",
+      border:`5px solid ${D("rgba(255,255,255,0.7)","#FFFFFF")}`, borderRadius:20,
       background:"rgba(0,0,0,0.3)", flexShrink:0,
     }}>
-      <span style={{ fontFamily:BEBAS, fontSize:140, lineHeight:1, color:"#FFF" }}>
+      <span style={{ fontFamily:BEBAS, fontSize:200, lineHeight:1, color:"#FFF" }}>
         {String(Math.max(0, team.score)).padStart(2,"0")}
       </span>
     </div>
@@ -80,17 +80,17 @@ function FoulsBox({ team, theme }) {
   const D = (dim, bright) => (theme.highContrast ? bright : dim);
   const bonus = team.teamFouls >= 6;
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8 }}>
-      <span style={{ fontFamily:COND, fontSize:15, fontWeight:800, letterSpacing:"0.35em",
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+      <span style={{ fontFamily:COND, fontSize:20, fontWeight:800, letterSpacing:"0.35em",
         color: bonus ? "#FF3333" : D("rgba(255,255,255,0.45)","rgba(255,255,255,0.85)") }}>
         FOULS{bonus ? " · BONUS" : ""}
       </span>
       <div style={{
-        width:84, height:66, display:"flex", alignItems:"center", justifyContent:"center",
-        border:`3px solid ${bonus ? "#FF3333" : D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")}`,
-        borderRadius:12, background:"rgba(0,0,0,0.3)",
+        width:120, height:95, display:"flex", alignItems:"center", justifyContent:"center",
+        border:`4px solid ${bonus ? "#FF3333" : D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")}`,
+        borderRadius:16, background:"rgba(0,0,0,0.3)",
       }}>
-        <span style={{ fontFamily:BEBAS, fontSize:46, color: bonus ? "#FF3333" : "#FFF" }}>
+        <span style={{ fontFamily:BEBAS, fontSize:66, color: bonus ? "#FF3333" : "#FFF" }}>
           {team.teamFouls}
         </span>
       </div>
@@ -110,45 +110,45 @@ function CenterClock({ state, courtId, divConfig, theme }) {
   const gameEnd    = clockTenths === 0;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:8, width:300, flexShrink:0 }}>
-      <div style={{ fontFamily:COND, fontSize:14, fontWeight:800, letterSpacing:"0.4em",
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10, width:420, flexShrink:0 }}>
+      <div style={{ fontFamily:COND, fontSize:18, fontWeight:800, letterSpacing:"0.4em",
         color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)") }}>
         สนาม {courtId} · {divConfig.label.toUpperCase()}
       </div>
 
       {jumpBall && (
-        <div style={{ padding:"3px 14px", background:"rgba(255,255,255,0.07)",
-          border:"1px solid rgba(255,255,255,0.2)", borderRadius:8,
-          fontFamily:COND, fontSize:14, fontWeight:800, color:D("rgba(255,255,255,0.6)","rgba(255,255,255,0.9)"),
+        <div style={{ padding:"4px 18px", background:"rgba(255,255,255,0.07)",
+          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
+          fontFamily:COND, fontSize:18, fontWeight:800, color:D("rgba(255,255,255,0.6)","rgba(255,255,255,0.9)"),
           letterSpacing:"0.2em" }}>⊕ JUMP BALL</div>
       )}
 
       {/* Game clock — the running match time */}
-      <div style={{ fontFamily:BEBAS, fontSize:64, lineHeight:1,
+      <div style={{ fontFamily:BEBAS, fontSize:92, lineHeight:1,
         color: gameEnd ? "#FF3333" : isRunning ? "#FFF" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"),
         textShadow: gameEnd ? "0 0 40px rgba(255,30,30,0.7)" : "none" }}>
         {fmtClock(clockTenths)}
       </div>
 
       {/* Shot clock — the big broadcast-style number */}
-      <div style={{ fontFamily:BEBAS, fontSize:118, lineHeight:0.9, fontWeight:900, color:shotColor,
+      <div style={{ fontFamily:BEBAS, fontSize:170, lineHeight:0.9, fontWeight:900, color:shotColor,
         textShadow: shotUrgent ? "0 0 50px rgba(255,30,30,0.85)" : "none" }}>
         {fmtShot(shotClockTenths)}
       </div>
 
-      <div style={{ fontFamily:COND, fontSize:13, fontWeight:700, letterSpacing:"0.3em",
+      <div style={{ fontFamily:COND, fontSize:16, fontWeight:700, letterSpacing:"0.3em",
         color: D("rgba(255,255,255,0.2)","rgba(255,255,255,0.7)") }}>
         #3X3BASKETBALL
       </div>
 
       {/* Possession dots */}
-      <div style={{ display:"flex", gap:14, marginTop:2 }}>
-        <div style={{ width:14, height:14, borderRadius:"50%",
+      <div style={{ display:"flex", gap:18, marginTop:2 }}>
+        <div style={{ width:18, height:18, borderRadius:"50%",
           background: possession === "teamA" ? teamA.color : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.3)"),
-          boxShadow: possession === "teamA" ? `0 0 10px ${teamA.color}` : "none" }}/>
-        <div style={{ width:14, height:14, borderRadius:"50%",
+          boxShadow: possession === "teamA" ? `0 0 12px ${teamA.color}` : "none" }}/>
+        <div style={{ width:18, height:18, borderRadius:"50%",
           background: possession === "teamB" ? teamB.color : D("rgba(255,255,255,0.12)","rgba(255,255,255,0.3)"),
-          boxShadow: possession === "teamB" ? `0 0 10px ${teamB.color}` : "none" }}/>
+          boxShadow: possession === "teamB" ? `0 0 12px ${teamB.color}` : "none" }}/>
       </div>
     </div>
   );
@@ -246,7 +246,7 @@ export default function TvPage() {
 
       {/* Main scoreboard */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-        justifyContent:"center", gap:28, padding:"0 60px" }}>
+        justifyContent:"center", gap:36, padding:"0 60px" }}>
 
         {winTeam && (
           <div style={{ padding:"10px 26px", background:"rgba(255,215,0,0.1)",
