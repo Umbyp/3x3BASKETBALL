@@ -182,7 +182,7 @@ function CenterPanel({state,send,onHorn,theme}){
   );
 
   return(
-    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+    <div style={{display:"flex",flexDirection:"column",gap:5}}>
       {gameOver&&(
         <div style={{textAlign:"center",padding:"12px 8px",background:"rgba(255,215,0,0.1)",
           border:"2px solid rgba(255,215,0,0.45)",borderRadius:14}}>
@@ -210,7 +210,7 @@ function CenterPanel({state,send,onHorn,theme}){
       {/* Shot clock */}
       <div style={{background:shotUrg?"linear-gradient(160deg,#1c0505,#0a0a14)":theme.boxBg,
         border:`2px solid ${shotUrg?"rgba(255,40,40,0.5)":shotWarn?"rgba(255,165,0,0.35)":D("rgba(255,255,255,0.07)","rgba(255,255,255,0.3)")}`,
-        borderRadius:16,padding:"9px 12px 7px",boxShadow:shotUrg?"0 0 35px rgba(255,30,30,0.2)":"none",transition:"all .3s"}}>
+        borderRadius:16,padding:"7px 12px 6px",boxShadow:shotUrg?"0 0 35px rgba(255,30,30,0.2)":"none",transition:"all .3s"}}>
         <div style={{...F,fontSize:9,letterSpacing:"0.45em",color:D("rgba(255,255,255,0.25)","rgba(255,255,255,0.85)"),textAlign:"center",marginBottom:2}}>SHOT CLOCK · 12s</div>
         <div className="shotclock-value" style={{textAlign:"center",...F,fontSize:110,fontWeight:900,lineHeight:.85,color:shotColor,
           textShadow:shotUrg?"0 0 45px rgba(255,30,30,0.9)":(theme.highContrast?"none":`0 0 25px ${shotColor}44`),
@@ -219,11 +219,11 @@ function CenterPanel({state,send,onHorn,theme}){
           <div style={{height:"100%",width:`${Math.min(100,(shotClockTenths/120)*100)}%`,background:shotColor,borderRadius:2,transition:"width .1s linear"}}/>
         </div>
         <button onClick={()=>send("shotClockToggle")}
-          style={Btn({width:"100%",padding:"7px 0",fontSize:15,letterSpacing:"0.1em",marginBottom:4,
+          style={Btn({width:"100%",padding:"6px 0",fontSize:15,letterSpacing:"0.1em",marginBottom:3,
             background:neutralBtn,border:`1.5px solid ${neutralBorder}`,color:neutralText})}>
           <StatusDot on={shotRunning}/>{shotRunning?"⏹ STOP":"▶ START"} <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[C]</span>
         </button>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:4}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:3}}>
           <button onClick={()=>send("shotClockSet",null,12)}
             style={Btn({padding:"6px 0",fontSize:26,color:neutralText,background:neutralBtn,border:`1.5px solid ${neutralBorder}`})}
           >12 <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[Z]</span></button>
@@ -231,11 +231,11 @@ function CenterPanel({state,send,onHorn,theme}){
             style={Btn({padding:"6px 0",fontSize:26,color:neutralText,background:neutralBtn,border:`1.5px solid ${neutralBorder}`})}
           >8 <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[X]</span></button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
-          {[{l:"+1s",v:10},{l:"-1s",v:-10}].map(b=>(
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+          {[{l:"+1s",v:10,neg:false},{l:"-1s",v:-10,neg:true}].map(b=>(
             <button key={b.l} onClick={()=>send("shotClockAdjust",null,b.v)}
-              style={Btn({padding:"4px 0",fontSize:10,background:neutralBtn,border:`1px solid ${neutralBorder}`,
-                color:D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")})}>{b.l}</button>
+              style={Btn({padding:"9px 0",fontSize:15,background:neutralBtn,border:`1.5px solid ${neutralBorder}`,
+                color:b.neg?D("rgba(255,120,120,0.75)","rgba(255,120,120,0.95)"):neutralText})}>{b.l}</button>
           ))}
         </div>
       </div>
@@ -243,16 +243,16 @@ function CenterPanel({state,send,onHorn,theme}){
       {/* Game clock */}
       <div style={{background:gameEnd?"rgba(255,0,0,0.25)":theme.boxBg,
         border:gameEnd?"2px solid #FF0000":`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.3)")}`,
-        borderRadius:14,padding:"7px 11px",boxShadow:gameEnd?"0 0 45px rgba(255,0,0,0.35)":"none",transition:"all .3s"}}>
-        <div style={{...F,fontSize:8,letterSpacing:"0.45em",color:gameEnd?"#FF9999":D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"),textAlign:"center",marginBottom:2}}>GAME CLOCK · 10 MIN</div>
+        borderRadius:14,padding:"6px 11px",boxShadow:gameEnd?"0 0 45px rgba(255,0,0,0.35)":"none",transition:"all .3s"}}>
+        <div style={{...F,fontSize:8,letterSpacing:"0.45em",color:gameEnd?"#FF9999":D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"),textAlign:"center",marginBottom:1}}>GAME CLOCK · 10 MIN</div>
         <div className="gameclock-value" style={{textAlign:"center",...F,fontSize:clockTenths<=600?54:46,fontWeight:900,lineHeight:1,
           color:gameEnd?"#FF0000":D("rgba(255,255,255,0.85)","rgba(255,255,255,0.98)"),
           textShadow:gameEnd?"0 0 35px #FF0000":"none",
           WebkitTextStroke:theme.highContrast?"1.5px rgba(0,0,0,0.5)":"0px transparent",transition:"all .2s"}}>{fmt(clockTenths)}</div>
-        <div style={{...F,fontSize:10,letterSpacing:"0.3em",color:isRunning?D("rgba(0,232,122,0.55)","rgba(0,232,122,0.9)"):D("rgba(255,255,255,0.18)","rgba(255,255,255,0.7)"),textAlign:"center",marginBottom:4}}>
+        <div style={{...F,fontSize:10,letterSpacing:"0.3em",color:isRunning?D("rgba(0,232,122,0.55)","rgba(0,232,122,0.9)"):D("rgba(255,255,255,0.18)","rgba(255,255,255,0.7)"),textAlign:"center",marginBottom:3}}>
           {gameOver?"■ GAME OVER":isRunning?"▶ LIVE":"■ PAUSED"}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:4}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginBottom:3}}>
           <button onClick={()=>send("clockToggle")} disabled={gameOver}
             style={Btn({padding:"7px 0",fontSize:14,background:neutralBtn,
               border:`1.5px solid ${neutralBorder}`,color:neutralText,opacity:gameOver?.3:1})}>
@@ -262,25 +262,26 @@ function CenterPanel({state,send,onHorn,theme}){
             style={Btn({padding:"7px 0",fontSize:14,background:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.14)"),
               border:`1px solid ${D("rgba(255,255,255,0.09)","rgba(255,255,255,0.3)")}`,color:D("rgba(255,255,255,0.38)","rgba(255,255,255,0.85)")})}>↺ RESET</button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:3}}>
-          {[{l:"+1m",v:600},{l:"+10s",v:100},{l:"+1s",v:10},{l:"-1s",v:-10},{l:"-10s",v:-100},{l:"-1m",v:-600}].map(b=>(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>
+          {[{l:"+1m",v:600,neg:false},{l:"+10s",v:100,neg:false},{l:"+1s",v:10,neg:false},
+            {l:"-1s",v:-10,neg:true},{l:"-10s",v:-100,neg:true},{l:"-1m",v:-600,neg:true}].map(b=>(
             <button key={b.l} onClick={()=>send("clockAdjust",null,b.v)}
-              style={Btn({padding:"4px 0",fontSize:9,background:neutralBtn,border:`1px solid ${neutralBorder}`,
-                color:D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")})}>{b.l}</button>
+              style={Btn({padding:"7px 0",fontSize:12,background:neutralBtn,border:`1.5px solid ${neutralBorder}`,
+                color:b.neg?D("rgba(255,120,120,0.75)","rgba(255,120,120,0.95)"):neutralText})}>{b.l}</button>
           ))}
         </div>
       </div>
 
       {/* Horn */}
       <button onClick={onHorn}
-        style={Btn({width:"100%",padding:"8px 0",fontSize:17,letterSpacing:"0.1em",
+        style={Btn({width:"100%",padding:"6px 0",fontSize:17,letterSpacing:"0.1em",
           background:D("rgba(255,255,255,0.05)","rgba(255,255,255,0.16)"),border:`2px solid ${D("rgba(255,255,255,0.12)","rgba(255,255,255,0.4)")}`,color:D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)")})}>
         📢 SOUND HORN <span style={{fontSize:8,opacity:theme.highContrast?.85:.5}}>[H]</span>
       </button>
 
       {/* Possession */}
-      <div style={{background:D("rgba(0,0,0,0.28)","rgba(0,0,0,0.6)"),border:`1px solid ${D("rgba(255,255,255,0.06)","rgba(255,255,255,0.25)")}`,borderRadius:13,padding:"7px 9px"}}>
-        <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.75)"),marginBottom:3}}>POSSESSION</div>
+      <div style={{background:D("rgba(0,0,0,0.28)","rgba(0,0,0,0.6)"),border:`1px solid ${D("rgba(255,255,255,0.06)","rgba(255,255,255,0.25)")}`,borderRadius:13,padding:"6px 8px"}}>
+        <div style={{...F,fontSize:8,letterSpacing:"0.4em",color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.75)"),marginBottom:2}}>POSSESSION</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
           {[
             {label:"◀ HOME",value:"teamA",color:state.teamA.color,active:possession==="teamA"},
@@ -288,7 +289,7 @@ function CenterPanel({state,send,onHorn,theme}){
             {label:"AWAY ▶",value:"teamB",color:state.teamB.color,active:possession==="teamB"},
           ].map(b=>(
             <button key={b.value} onClick={()=>b.value==="jump"?send("jumpBall"):send("possession",null,possession===b.value?null:b.value)}
-              style={Btn({padding:"5px 0",fontSize:9,letterSpacing:"0.04em",
+              style={Btn({padding:"4px 0",fontSize:9,letterSpacing:"0.04em",
                 background:b.active?`${b.color}18`:D("rgba(255,255,255,0.04)","rgba(255,255,255,0.12)"),
                 border:b.active?`1.5px solid ${b.color}55`:`1px solid ${D("rgba(255,255,255,0.07)","rgba(255,255,255,0.25)")}`,
                 color:b.active?b.color:D("rgba(255,255,255,0.3)","rgba(255,255,255,0.75)")})}>
