@@ -106,7 +106,7 @@ function CenterClock({ state, courtId, divConfig, theme }) {
   const shotSec    = shotClockTenths / 10;
   const shotUrgent = shotSec <= 3 && shotClockTenths > 0;
   const shotWarn   = shotSec <= 5 && shotClockTenths > 0;
-  const shotColor  = shotUrgent ? "#FF2222" : shotWarn ? "#FFA500" : "#FF3B3B";
+  const shotColor  = shotUrgent ? "#FF3333" : shotWarn ? "#FFD700" : "#FFFFFF";
   const gameEnd    = clockTenths === 0;
 
   return (
@@ -131,8 +131,7 @@ function CenterClock({ state, courtId, divConfig, theme }) {
       </div>
 
       {/* Shot clock — the big broadcast-style number */}
-      <div style={{ fontFamily:BEBAS, fontSize:170, lineHeight:0.9, fontWeight:900, color:shotColor,
-        textShadow: shotUrgent ? "0 0 50px rgba(255,30,30,0.85)" : "none" }}>
+      <div style={{ fontFamily:BEBAS, fontSize:170, lineHeight:0.9, fontWeight:900, color:shotColor }}>
         {fmtShot(shotClockTenths)}
       </div>
 
