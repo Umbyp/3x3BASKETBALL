@@ -181,7 +181,7 @@ function CenterDisplay({state,send,doPossession,doJumpBall}){
         </div>
       )}
 
-      <div style={{display:"flex",gap:8,marginTop:2}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:2}}>
         <button onClick={()=>doPossession("teamA")} title="Possession HOME" style={{width:64,height:64,borderRadius:12,
           border:`1px solid ${hp.border}`,background:hp.bg,color:hp.color,fontSize:24,cursor:"pointer"}}>◀</button>
         <button onClick={doJumpBall} style={{display:"flex",alignItems:"center",padding:"0 6px",fontSize:13,
