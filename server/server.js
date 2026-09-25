@@ -1,5 +1,5 @@
 /**
- * 🏀 3x3 Basketball Scoreboard Server (v2)
+ * 🏀 3x3 Basketball Scoreboard Server (v3)
  *
  * Fixes vs v1:
  *  - Clock drift: ใช้ Date.now() reference แทน setInterval ลบ 1 ทุก tick
@@ -8,13 +8,28 @@
  *  - CORS รองรับหลาย origin
  *  - Input validation ทุก field
  *  - Graceful shutdown
+ *
+ * v3 additions:
+ *  - Court state persisted to Firebase (court_live/{courtId}) so a
+ *    restart/redeploy doesn't wipe every in-progress game — optional,
+ *    degrades gracefully to in-memory-only if Firebase Admin isn't
+ *    configured (see firebaseAdmin.js).
+ *  - Tournament admin actions (team/group edits, bracket regenerate,
+ *    schedule delay) moved server-side behind a password-gated session
+ *    token, instead of the client writing directly to Firebase with a
+ *    password check baked into the browser bundle.
  */
-require("dotenv").config();
+import "dotenv/config";
 
-const express    = require("express");
-const http       = require("http");
-const { Server } = require("socket.io");
-const cors       = require("cors");
+import express    from "express";
+import http       from "http";
+import { Server } from "socket.io";
+import cors       from "cors";
+
+import { db as adminDb, loadCourtState, saveCourtState } from "./firebaseAdmin.js";
+import { checkPassword, issueToken, verifyToken, checkRateLimit } from "./adminAuth.js";
+import { DEFAULT_TEAMS, generateGroupMatches } from "../client/src/constants.js";
+import { generateKoBracket } from "../client/src/lib/bracketGen.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.PORT || "3001", 10);
@@ -38,10 +53,11 @@ const corsOpts = {
   credentials: true
 };
 app.use(cors(corsOpts));
+app.use(express.json());
 const io = new Server(server, { cors: corsOpts, pingTimeout: 20000, pingInterval: 10000 });
 
 app.get("/health", (_req, res) =>
-  res.json({ ok: true, courts: COURT_IDS, uptime: Math.floor(process.uptime()), clients: io.engine.clientsCount })
+  res.json({ ok: true, courts: COURT_IDS, uptime: Math.floor(process.uptime()), clients: io.engine.clientsCount, persistence: !!adminDb })
 );
 
 // ── State factory ──────────────────────────────────────────────────────────────
@@ -62,6 +78,7 @@ const states  = {};  // gameState per court
 const gcMeta  = {};  // gameClock reference { startAt, startTenths }
 const scMeta  = {};  // shotClock reference
 const dirty   = {};  // broadcast flag
+const saveTimers = {}; // debounced persistence timers per court
 
 COURT_IDS.forEach(id => {
   states[id] = mkState(id);
@@ -69,6 +86,34 @@ COURT_IDS.forEach(id => {
   scMeta[id] = null;
   dirty[id]  = false;
 });
+
+// Load any persisted state (Firebase Admin only — no-op otherwise). A
+// restored clock always comes back paused: silently "catching up" the
+// time that elapsed while the server was down would be actively wrong.
+async function loadPersistedState() {
+  if (!adminDb) return;
+  for (const cid of COURT_IDS) {
+    const saved = await loadCourtState(cid);
+    if (saved) {
+      states[cid] = { ...mkState(cid), ...saved, isRunning: false, shotRunning: false };
+      console.log(`[persist] restored court ${cid} from Firebase`);
+    }
+  }
+}
+
+function scheduleSave(cid) {
+  if (!adminDb) return;
+  clearTimeout(saveTimers[cid]);
+  saveTimers[cid] = setTimeout(() => saveCourtState(cid, states[cid]), 2000);
+}
+
+function flushAllSaves() {
+  if (!adminDb) return Promise.resolve();
+  return Promise.all(COURT_IDS.map(cid => {
+    clearTimeout(saveTimers[cid]);
+    return saveCourtState(cid, states[cid]);
+  }));
+}
 
 // ── Broadcast ──────────────────────────────────────────────────────────────────
 // คำนวณเวลาจาก elapsed ณ ขณะส่ง (แม่นยำกว่าอ่านจาก state โดยตรง)
@@ -121,6 +166,10 @@ const monitorLoop = setInterval(() => {
   });
   io.to("monitor").emit("allStates", snap);
 }, 500);
+
+// Safety-net persistence flush — covers hard crashes where SIGTERM/SIGINT
+// never fires (the debounced per-action save is the primary path).
+const persistLoop = setInterval(() => { flushAllSaves(); }, 30000);
 
 // ── Clock helpers ──────────────────────────────────────────────────────────────
 function startGame(cid, s) { if (s.isRunning || s.clockTenths <= 0) return; s.isRunning = true; gcMeta[cid] = { startAt: Date.now(), startTenths: s.clockTenths }; }
@@ -187,13 +236,14 @@ function handleAction(cid, { type, team, value }) {
       case "resetGame": {
         stopGame(cid,s); stopShot(cid,s);
         const f = mkState(cid); f.teamA.name=s.teamA.name; f.teamA.color=s.teamA.color; f.teamB.name=s.teamB.name; f.teamB.color=s.teamB.color;
-        states[cid]=f; gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); return;
+        states[cid]=f; gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
       }
-      case "fullReset":     stopGame(cid,s); stopShot(cid,s); states[cid]=mkState(cid); gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); return;
+      case "fullReset":     stopGame(cid,s); stopShot(cid,s); states[cid]=mkState(cid); gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
       default:              console.warn(`[?] unknown action "${type}"`); return;
     }
   } catch (err) { console.error(`[!] action error court=${cid} type=${type}:`, err.message); return; }
   dirty[cid] = true;
+  scheduleSave(cid);
 }
 
 // ── Socket events ──────────────────────────────────────────────────────────────
@@ -222,19 +272,99 @@ io.on("connection", socket => {
   socket.on("error",        e  => console.error(`[!] socket:`, e.message));
 });
 
+// ── Admin API — tournament team/group edits, bracket regenerate, schedule ──────
+// delay. Moved server-side so the password never ships in the client bundle,
+// and so Firebase Security Rules can deny these structural writes to every
+// client (authenticated or not) and only trust this server's Admin SDK.
+function requireAdmin(req, res, next) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!verifyToken(token)) return res.status(401).json({ error: "unauthorized" });
+  next();
+}
+
+app.post("/admin/login", (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || "unknown";
+  if (!checkRateLimit(ip)) return res.status(429).json({ error: "too many attempts, try again later" });
+  if (!checkPassword(req.body?.password)) return res.status(401).json({ error: "wrong password" });
+  res.json({ token: issueToken() });
+});
+
+app.post("/admin/tournament/:division/ensure-seeded", async (req, res) => {
+  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
+  const divId = req.params.division;
+  try {
+    const ref = adminDb.ref(`tournament_data/${divId}`);
+    const snap = await ref.get();
+    if (!snap.exists()) {
+      const teams = DEFAULT_TEAMS[divId] || DEFAULT_TEAMS.open;
+      await ref.set({
+        teams, groupMatches: generateGroupMatches(teams),
+        koMatches: generateKoBracket(teams), delayMinutes: 0,
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[!] ensure-seeded error:", err.message);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
+app.post("/admin/tournament/:division/regenerate", requireAdmin, async (req, res) => {
+  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
+  const divId = req.params.division;
+  const teams = req.body?.teams;
+  if (!teams || typeof teams !== "object" || Array.isArray(teams)) return res.status(400).json({ error: "bad teams payload" });
+  for (const [g, ts] of Object.entries(teams)) {
+    if (!Array.isArray(ts) || ts.some(t => typeof t !== "string")) return res.status(400).json({ error: `bad team list for group ${g}` });
+  }
+  try {
+    const ref = adminDb.ref(`tournament_data/${divId}`);
+    const snap = await ref.get();
+    const delayMinutes = snap.exists() ? (snap.val().delayMinutes ?? 0) : 0;
+    await ref.set({
+      teams, groupMatches: generateGroupMatches(teams),
+      koMatches: generateKoBracket(teams), delayMinutes,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[!] regenerate error:", err.message);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
+app.post("/admin/tournament/:division/delay", requireAdmin, async (req, res) => {
+  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
+  const divId = req.params.division;
+  const minutes = parseInt(req.body?.minutes, 10);
+  if (isNaN(minutes) || minutes < 0) return res.status(400).json({ error: "bad minutes" });
+  try {
+    await adminDb.ref(`tournament_data/${divId}/delayMinutes`).set(minutes);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[!] delay error:", err.message);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────────
-server.listen(PORT, () => {
-  console.log(`\n🏀  3x3 Server (v2)`);
-  console.log(`    Port   : ${PORT}`);
-  console.log(`    Courts : ${COURT_IDS.join(", ")}`);
-  console.log(`    CORS   : ${allowedOrigins.join(", ")}\n`);
+loadPersistedState().finally(() => {
+  server.listen(PORT, () => {
+    console.log(`\n🏀  3x3 Server (v3)`);
+    console.log(`    Port   : ${PORT}`);
+    console.log(`    Courts : ${COURT_IDS.join(", ")}`);
+    console.log(`    CORS   : ${allowedOrigins.join(", ")}`);
+    console.log(`    Persist: ${adminDb ? "Firebase (enabled)" : "in-memory only (disabled)"}\n`);
+  });
 });
 
 function shutdown(sig) {
   console.log(`\n[${sig}] shutting down...`);
-  clearInterval(masterLoop); clearInterval(monitorLoop);
+  clearInterval(masterLoop); clearInterval(monitorLoop); clearInterval(persistLoop);
   io.close();
-  server.close(() => { console.log("done."); process.exit(0); });
+  flushAllSaves().finally(() => {
+    server.close(() => { console.log("done."); process.exit(0); });
+  });
   setTimeout(() => process.exit(1), 5000);
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));

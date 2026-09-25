@@ -1,0 +1,29 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "tournament_data": {
+      "$division": {
+        ".read": true,
+
+        "groupMatches": {
+          "$idx": {
+            "homeScore": { ".write": "newData.val() === null || newData.isNumber()" },
+            "awayScore": { ".write": "newData.val() === null || newData.isNumber()" },
+            "played":    { ".write": "newData.isBoolean()" },
+            "court":     { ".write": "newData.val() === null || newData.isString()" }
+          }
+        },
+        "koMatches": {
+          "$idx": {
+            "homeScore": { ".write": "newData.val() === null || newData.isNumber()" },
+            "awayScore": { ".write": "newData.val() === null || newData.isNumber()" },
+            "played":    { ".write": "newData.isBoolean()" },
+            "court":     { ".write": "newData.val() === null || newData.isString()" }
+          }
+        }
+      }
+    }
+  }
+}

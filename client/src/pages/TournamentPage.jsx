@@ -8,14 +8,30 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { db } from "../firebase.js";
-import { ref, onValue, update, set } from "firebase/database";
-import {
-  DIVISIONS, GROUP_COLORS, DEFAULT_TEAMS,
-  generateGroupMatches, getDivision,
-} from "../constants.js";
-import { generateKoBracket } from "../lib/bracketGen.js";
+import { ref, onValue, update } from "firebase/database";
+import { DIVISIONS, GROUP_COLORS, getDivision } from "../constants.js";
+import { SERVER_URL } from "../socket.js";
 
-const checkAdmin = pw => pw === (import.meta.env.VITE_ADMIN_PASS || "admin1234");
+// Admin actions (login, bracket regenerate, schedule delay) go through the
+// server's /admin/* API instead of a client-side password check or a direct
+// Firebase write — see server/adminAuth.js + server/server.js. The password
+// never ships in this bundle, and Firebase Security Rules deny these
+// structural writes to every client so only the server's Admin SDK can make
+// them (see database.rules.json).
+async function adminLogin(password) {
+  const res = await fetch(`${SERVER_URL}/admin/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) return null;
+  const { token } = await res.json();
+  return token;
+}
+async function ensureSeeded(divId) {
+  try {
+    await fetch(`${SERVER_URL}/admin/tournament/${divId}/ensure-seeded`, { method: "POST" });
+  } catch (err) { console.warn("[tournament] ensure-seeded failed:", err.message); }
+}
 
 // ── ✏️ ตารางเวลา + สนาม ────────────────────────────────────────────────────────
 // court: "A" | "B" | "C"  ← แก้ให้ตรงกับสนามจริง
@@ -805,8 +821,10 @@ export default function TournamentPage() {
   const [data, setData]    = useState(null);
   const [loading, setLoad] = useState(true);
   const [isAdmin, setAdmin]= useState(false);
+  const [adminToken, setAdminToken] = useState(null);
   const [showLogin, setLogin] = useState(false);
   const [loginPw, setPw]   = useState("");
+  const [loginErr, setLoginErr] = useState(false);
   const [modal, setModal]  = useState(null);
   const [toast, setToast]  = useState(null);
   const now = useNow(30000);
@@ -818,13 +836,7 @@ export default function TournamentPage() {
     return onValue(r, snap => {
       const d = snap.val();
       if (d) setData(d);
-      else {
-        const teams = DEFAULT_TEAMS[divId] || DEFAULT_TEAMS.open;
-        set(ref(db, `tournament_data/${divId}`), {
-          teams, groupMatches: generateGroupMatches(teams),
-          koMatches: generateKoBracket(teams), delayMinutes: 0,
-        });
-      }
+      else ensureSeeded(divId);
       setLoad(false);
     });
   }, [divId]);
@@ -865,17 +877,24 @@ export default function TournamentPage() {
     }).then(()=>setToast({message:"🗑️ Reset แล้ว",type:"info"}));
   };
   const saveDelay = mins => {
-    update(ref(db),{[`tournament_data/${divId}/delayMinutes`]:mins})
-      .then(()=>setToast({message:`⏰ เลื่อน +${mins} นาที`,type:"info"}));
+    fetch(`${SERVER_URL}/admin/tournament/${divId}/delay`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ minutes: mins }),
+    }).then(res => {
+      if (res.ok) setToast({message:`⏰ เลื่อน +${mins} นาที`,type:"info"});
+      else setToast({message:"❌ บันทึกไม่สำเร็จ",type:"error"});
+    });
   };
   const regenerateBracket = newTeams => {
-    const groupMatches = generateGroupMatches(newTeams);
-    const koMatches = generateKoBracket(newTeams);
-    set(ref(db, `tournament_data/${divId}`), {
-      teams: newTeams, groupMatches, koMatches, delayMinutes: data?.delayMinutes ?? 0,
-    }).then(()=>{ setToast({message:"🔄 สร้างสายการแข่งใหม่แล้ว",type:"success"}); setTab("standings"); });
+    fetch(`${SERVER_URL}/admin/tournament/${divId}/regenerate`, {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ teams: newTeams }),
+    }).then(res => {
+      if (res.ok) { setToast({message:"🔄 สร้างสายการแข่งใหม่แล้ว",type:"success"}); setTab("standings"); }
+      else setToast({message:"❌ สร้างสายการแข่งไม่สำเร็จ",type:"error"});
+    });
   };
-  const logout = () => { setAdmin(false); if (tab==="teams") setTab("standings"); };
+  const logout = () => { setAdmin(false); setAdminToken(null); if (tab==="teams") setTab("standings"); };
 
   if (!db) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-6">
@@ -980,14 +999,15 @@ export default function TournamentPage() {
       </footer>
 
       {showLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={()=>{setLogin(false);setPw("");}}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onClick={()=>{setLogin(false);setPw("");setLoginErr(false);}}>
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-72 animate-fade-in" onClick={e=>e.stopPropagation()}>
             <h3 className="text-xl font-black text-white tracking-widest text-center mb-4">ADMIN</h3>
-            <input type="password" value={loginPw} onChange={e=>setPw(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter"){if(checkAdmin(loginPw)){setAdmin(true);setLogin(false);setPw("");}else setPw("");}}}
+            <input type="password" value={loginPw} onChange={e=>{setPw(e.target.value);setLoginErr(false);}}
+              onKeyDown={async e=>{if(e.key==="Enter"){const t=await adminLogin(loginPw);if(t){setAdminToken(t);setAdmin(true);setLogin(false);setPw("");}else{setPw("");setLoginErr(true);}}}}
               autoFocus placeholder="Password"
               className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-center text-white outline-none focus:border-orange-500 transition-colors mb-3"/>
-            <button onClick={()=>{if(checkAdmin(loginPw)){setAdmin(true);setLogin(false);setPw("");}else setPw("");}}
+            {loginErr && <p className="text-rose-400 text-[11px] text-center mb-3">รหัสผ่านไม่ถูกต้อง หรือเชื่อมต่อเซิร์ฟเวอร์ไม่ได้</p>}
+            <button onClick={async()=>{const t=await adminLogin(loginPw);if(t){setAdminToken(t);setAdmin(true);setLogin(false);setPw("");}else{setPw("");setLoginErr(true);}}}
               className="w-full py-2.5 rounded-xl bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-gray-200 transition-colors">Login</button>
           </div>
         </div>

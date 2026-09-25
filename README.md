@@ -44,7 +44,9 @@ https://nodejs.org
 1. https://console.firebase.google.com → Add project
 2. Build → Realtime Database → Create database → Test mode
 3. Project Settings → Your apps → Web → ก็อปปี้ config
-4. ใส่ config ใน `client/.env`
+4. ใส่ config ใน `client/.env` (ตัวแปร `VITE_FIREBASE_*` ทั้งหมด — ดู `client/src/firebase.js`)
+5. **ตั้งค่า Security Rules (สำคัญ — ห้ามข้าม):** เข้า Realtime Database → tab **Rules** → คัดลอกเนื้อหาจาก [`database.rules.json`](./database.rules.json) ในโปรเจกต์นี้ไปวางแทนที่ทั้งหมด → **Publish** โดยไม่ทำขั้นตอนนี้ ฐานข้อมูลจะยังอยู่ใน "Test mode" ซึ่งใครก็ได้ที่รู้ URL แก้/ลบข้อมูลทั้งหมดได้โดยไม่ต้องผ่านรหัสผ่าน Admin เลย
+6. **ตั้งค่า Service Account สำหรับ Server:** Project Settings → **Service Accounts** → **Generate new private key** (ดาวน์โหลดไฟล์ JSON) → เก็บค่า `project_id`, `client_email`, `private_key` ไว้ใช้เป็น environment variables ของ **Server** (ดูหัวข้อ Deploy ด้านล่าง) — ไฟล์นี้เป็นความลับ **ห้าม commit เข้า git**
 
 ### 3. รัน Server
 ```bash
@@ -115,17 +117,35 @@ npx vercel --prod
 
 ### Server (Railway / Render)
 ```bash
-# Environment variables:
+# Environment variables (พื้นฐาน — ระบบทำงานได้แม้ไม่ตั้งค่าส่วนถัดไป):
 PORT=3001
 CORS_ORIGIN=https://your-client.vercel.app
 COURTS=A,B,C
+
+# Environment variables (Firebase Admin — เปิดใช้ 2 อย่าง: (1) คะแนน/นาฬิกาไม่หายเมื่อ
+# server restart/redeploy (2) หน้า Admin ของ Tournament ทำงานผ่าน server แทนการเขียน
+# Firebase ตรงจาก browser — ถ้าไม่ตั้งค่าพวกนี้ ระบบจะ fallback เป็นแบบเดิม คือเก็บ
+# คะแนนใน memory อย่างเดียว และ tab "จัดการทีม" จะใช้งานไม่ได้):
+FIREBASE_PROJECT_ID=xxx        # จาก service account JSON: project_id
+FIREBASE_CLIENT_EMAIL=xxx      # จาก service account JSON: client_email
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+                                # จาก service account JSON: private_key (คัดลอกทั้งก้อนรวม \n)
+FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
+                                # จาก Realtime Database → ที่อยู่ URL ด้านบนสุดของหน้า
+
+# Environment variable (รหัสผ่าน Admin ของหน้า Tournament — ย้ายมาอยู่ฝั่ง server
+# แล้ว ไม่ได้ฝังอยู่ใน client bundle เหมือนเดิม ตั้งรหัสของจริงแทน default นี้ด้วย):
+ADMIN_PASSWORD=เปลี่ยนเป็นรหัสผ่านจริง
 ```
+
+⚠️ **`VITE_ADMIN_PASS` (ฝั่ง client) เลิกใช้แล้ว** — ลบออกจาก environment variables ของ Vercel ได้เลย รหัสผ่าน Admin ตอนนี้ตรวจสอบที่ server เท่านั้น (ตัวแปร `ADMIN_PASSWORD` ด้านบน)
 
 ---
 
 ## ⚙️ ปรับรุ่น/สนาม/ทีม
 
-แก้ไขที่ `client/src/constants.js` ไฟล์เดียว
+- **สนาม/รุ่นการแข่งขัน**: แก้ไขที่ `client/src/constants.js` (`COURTS`, `DIVISIONS`)
+- **ทีม/กลุ่มในแต่ละรุ่น**: ไม่ต้องแก้โค้ดแล้ว — เข้าหน้า `/tournament?division=xxx` → ปุ่ม **Admin** ด้านล่าง → ล็อกอินด้วย `ADMIN_PASSWORD` → แท็บ **"จัดการทีม"** เพิ่ม/ลบทีมและกลุ่มได้เอง แล้วกด "สร้างสายการแข่งใหม่" (ระบบสร้างตารางแข่ง + สาย Knockout ให้อัตโนมัติ, ต้องตั้งค่า Firebase Admin ตามหัวข้อ Deploy ด้านบนก่อน)
 
 ---
 
