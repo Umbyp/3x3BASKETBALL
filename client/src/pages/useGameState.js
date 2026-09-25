@@ -6,14 +6,14 @@ export function useGameState(courtId) {
   const [connected, setConnected] = useState(socket.connected);
 
   useEffect(() => {
-    const onConnect    = () => setConnected(true);
+    const onConnect    = () => { setConnected(true); socket.emit("joinCourt", courtId); };
     const onDisconnect = () => setConnected(false);
     const onState      = (s) => { if (s) setState(s); };
 
     socket.on("connect",     onConnect);
     socket.on("disconnect",  onDisconnect);
     socket.on("stateUpdate", onState);
-    socket.emit("joinCourt", courtId);
+    if (socket.connected) { setConnected(true); socket.emit("joinCourt", courtId); }
 
     return () => {
       socket.off("connect",     onConnect);
@@ -21,8 +21,6 @@ export function useGameState(courtId) {
       socket.off("stateUpdate", onState);
     };
   }, [courtId]);
-
-  useEffect(() => { socket.emit("joinCourt", courtId); }, [courtId]);
 
   const send = useCallback((type, team, value) => {
     socket.emit("action", { courtId, type, team, value });

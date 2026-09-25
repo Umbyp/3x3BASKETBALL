@@ -11,9 +11,9 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { socket } from "../socket.js";
 import { COURTS, DIVISIONS } from "../constants.js";
 import { useTheme, ThemeSwitcher } from "../theme.jsx";
+import { useGameState } from "./useGameState.js";
 
 function fmtClock(tenths) {
   const t = Math.max(0, tenths);
@@ -158,22 +158,8 @@ function CenterClock({ state, courtId, divConfig, theme }) {
 export default function TvPage() {
   const [searchParams]  = useSearchParams();
   const courtId         = (searchParams.get("court") || "A").toUpperCase();
-  const [state, setState] = useState(null);
-  const [connected, setConnected] = useState(false);
+  const { state, connected } = useGameState(courtId);
   const { theme, themeId, setThemeId, cycleTheme } = useTheme();
-
-  useEffect(() => {
-    const onConnect = () => { setConnected(true); socket.emit("joinCourt", courtId); };
-    socket.on("connect",     onConnect);
-    socket.on("disconnect",  () => setConnected(false));
-    socket.on("stateUpdate", s  => { if (s) setState(s); });
-    if (socket.connected) { setConnected(true); socket.emit("joinCourt", courtId); }
-    return () => {
-      socket.off("connect",    onConnect);
-      socket.off("disconnect");
-      socket.off("stateUpdate");
-    };
-  }, [courtId]);
 
   const [showSelector, setShowSelector] = useState(false);
   useEffect(() => {

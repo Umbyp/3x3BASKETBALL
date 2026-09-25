@@ -5,9 +5,9 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { socket } from "../socket.js";
 import { DIVISIONS, COURTS, RULES } from "../constants.js";
 import TournamentBridge from "../components/scoreboard/TournamentBridge.jsx";
+import { useGameState } from "./useGameState.js";
 
 const audioCtx = typeof window !== "undefined" ? { horn: new Audio("/buzzer.mp3"), buzzer: new Audio("/buzzer.mp3") } : null;
 let unlocked = false;
@@ -391,16 +391,13 @@ export default function ScoreboardPage(){
   const courtId        = (sp.get("court")||"A").toUpperCase();
   const divisionId     = sp.get("division")||"open";
   const divConfig      = DIVISIONS.find(d=>d.id===divisionId)||DIVISIONS[0];
-  const [state,setS]   = useState(null);
-  const [conn,setConn] = useState(false);
+  const { state, connected: conn, send } = useGameState(courtId);
   const [mobileTab,setMobileTab] = useState("clock");
   const [modal,setModal] = useState(null); // null | "settings" | "reset"
   const [undone,setUndone]   = useState(null);
   const undoneTimer = useRef(null);
   const prevGC = useRef(null), prevSC = useRef(null);
   const stateRef = useRef(null); stateRef.current = state;
-
-  const send = useCallback((type,team,value)=>socket.emit("action",{courtId,type,team,value}),[courtId]);
 
   // Score/foul/timeout/clock/possession corrections are undoable — the server
   // keeps the actual history stack and reverts to an exact prior snapshot, so
@@ -433,15 +430,6 @@ export default function ScoreboardPage(){
     setUndone(top.label);
     undoneTimer.current=setTimeout(()=>setUndone(null),2500);
   },[send]);
-
-  useEffect(()=>{
-    const onConnect = ()=>{setConn(true);socket.emit("joinCourt",courtId);};
-    socket.on("connect",onConnect);
-    socket.on("disconnect",()=>setConn(false));
-    socket.on("stateUpdate",s=>{if(s)setS(s);});
-    if(socket.connected){setConn(true);socket.emit("joinCourt",courtId);}
-    return()=>{socket.off("connect",onConnect);socket.off("disconnect");socket.off("stateUpdate");};
-  },[courtId]);
 
   useEffect(()=>{
     if(!state) return;
