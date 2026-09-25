@@ -88,11 +88,12 @@ export default function MonitorPage(){
   const [all,setAll]=useState({});
   const [conn,setConn]=useState(false);
   useEffect(()=>{
-    socket.on("connect",()=>setConn(true));
+    const onConnect = ()=>{setConn(true);socket.emit("joinMonitor");};
+    socket.on("connect",onConnect);
     socket.on("disconnect",()=>setConn(false));
     socket.on("allStates",s=>setAll(s));
-    socket.emit("joinMonitor");
-    return()=>{socket.off("connect");socket.off("disconnect");socket.off("allStates");};
+    if(socket.connected){setConn(true);socket.emit("joinMonitor");}
+    return()=>{socket.off("connect",onConnect);socket.off("disconnect");socket.off("allStates");};
   },[]);
   const liveCount=Object.values(all).filter(s=>s?.isRunning&&!s?.gameOver).length;
   return(
