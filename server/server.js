@@ -43,6 +43,7 @@ const GAME_DEFAULT = 6000;  // 10 นาที (tenths)
 const OT_DEFAULT   = 3000;  // OT 5 นาที
 const WIN_SCORE    = 21;
 const MAX_TO       = 1;
+const HISTORY_MAX  = 30;
 
 // ── Express + Socket.io ────────────────────────────────────────────────────────
 const app    = express();
@@ -74,17 +75,21 @@ function mkState(courtId) {
 }
 
 // ── Storage ────────────────────────────────────────────────────────────────────
-const states  = {};  // gameState per court
-const gcMeta  = {};  // gameClock reference { startAt, startTenths }
-const scMeta  = {};  // shotClock reference
-const dirty   = {};  // broadcast flag
-const saveTimers = {}; // debounced persistence timers per court
+const states     = {};  // gameState per court
+const gcMeta     = {};  // gameClock reference { startAt, startTenths }
+const scMeta     = {};  // shotClock reference
+const dirty      = {};  // broadcast flag
+const saveTimers = {};  // debounced persistence timers per court
+const history    = {};  // undo stack per court: [{ id, label, color, atTenths, snap }, ...] newest-first
+const historySeq = {};  // per-court incrementing id counter
 
 COURT_IDS.forEach(id => {
-  states[id] = mkState(id);
-  gcMeta[id] = null;
-  scMeta[id] = null;
-  dirty[id]  = false;
+  states[id]     = mkState(id);
+  gcMeta[id]     = null;
+  scMeta[id]     = null;
+  dirty[id]      = false;
+  history[id]    = [];
+  historySeq[id] = 0;
 });
 
 // Load any persisted state (Firebase Admin only — no-op otherwise). A
@@ -124,6 +129,7 @@ function broadcast(cid) {
   const p   = { ...s };
   if (s.isRunning   && gcMeta[cid]) p.clockTenths     = Math.max(0, gcMeta[cid].startTenths - Math.floor((now - gcMeta[cid].startAt) / 100));
   if (s.shotRunning && scMeta[cid]) p.shotClockTenths = Math.max(0, scMeta[cid].startTenths - Math.floor((now - scMeta[cid].startAt) / 100));
+  p.history = (history[cid]||[]).map(h => ({ id: h.id, label: h.label, color: h.color, atTenths: h.atTenths }));
   io.to(`court:${cid}`).emit("stateUpdate", p);
 }
 
@@ -197,10 +203,92 @@ const isColor = c  => typeof c === "string" && /^#[0-9A-Fa-f]{6}$/.test(c);
 const toInt   = v  => { const n = parseInt(v, 10); return isNaN(n) ? 0 : n; };
 const clamp   = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+// ── Undo / history ─────────────────────────────────────────────────────────────
+// Actions worth remembering on the undo stack. teamName/teamColor/fullReset are
+// deliberately excluded — setup changes, not in-game corrections.
+const UNDOABLE = new Set([
+  "score","clockToggle","clockAdjust","shotClockToggle","shotClockSet","shotClockAdjust",
+  "teamFoul","teamFoulReset","timeout","possession","jumpBall","resetGame",
+]);
+
+function liveClockTenths(cid, s) {
+  return (s.isRunning && gcMeta[cid])
+    ? Math.max(0, gcMeta[cid].startTenths - Math.floor((Date.now() - gcMeta[cid].startAt) / 100))
+    : s.clockTenths;
+}
+function liveShotTenths(cid, s) {
+  return (s.shotRunning && scMeta[cid])
+    ? Math.max(0, scMeta[cid].startTenths - Math.floor((Date.now() - scMeta[cid].startAt) / 100))
+    : s.shotClockTenths;
+}
+
+function snapshotState(cid, s) {
+  return {
+    teamA: { ...s.teamA }, teamB: { ...s.teamB },
+    clockTenths: liveClockTenths(cid, s), isRunning: s.isRunning,
+    shotClockTenths: liveShotTenths(cid, s), shotRunning: s.shotRunning,
+    possession: s.possession, jumpBall: s.jumpBall,
+    gameOver: s.gameOver, winner: s.winner, isOvertime: s.isOvertime,
+  };
+}
+
+function restoreSnapshot(cid, snap) {
+  const s = states[cid]; if (!s) return;
+  s.teamA = { ...snap.teamA }; s.teamB = { ...snap.teamB };
+  s.possession = snap.possession; s.jumpBall = snap.jumpBall;
+  s.gameOver = snap.gameOver; s.winner = snap.winner; s.isOvertime = snap.isOvertime;
+
+  s.clockTenths = snap.clockTenths; s.isRunning = false; gcMeta[cid] = null;
+  if (snap.isRunning && s.clockTenths > 0) { s.isRunning = true; gcMeta[cid] = { startAt: Date.now(), startTenths: s.clockTenths }; }
+
+  s.shotClockTenths = snap.shotClockTenths; s.shotRunning = false; scMeta[cid] = null;
+  if (snap.shotRunning && s.shotClockTenths > 0) { s.shotRunning = true; scMeta[cid] = { startAt: Date.now(), startTenths: s.shotClockTenths }; }
+}
+
+function actionLabel(s, type, team, value) {
+  const T = t => (s[t] && s[t].name) || (t === "teamA" ? "HOME" : "AWAY");
+  switch (type) {
+    case "score":           { const d = clamp(toInt(value), -50, 50); return `${T(team)} ${d > 0 ? "+" : ""}${d}`; }
+    case "clockToggle":     return s.isRunning ? "STOP" : "START";
+    case "clockAdjust":     { const d = clamp(toInt(value), -36000, 36000), a = Math.abs(d);
+                               const lab = a >= 600 ? `${a / 600}M` : a >= 100 ? `${a / 100}0S` : `${a / 10}S`;
+                               return `GAME ${d > 0 ? "+" : "−"}${lab}`; }
+    case "shotClockToggle": return s.shotRunning ? "SHOT HOLD" : "SHOT RUN";
+    case "shotClockSet":    return `SHOT → ${clamp(toInt(value ?? 12), 0, 12)}`;
+    case "shotClockAdjust": { const d = clamp(toInt(value), -120, 120); return `SHOT ${d > 0 ? "+" : "−"}${Math.abs(d) / 10}S`; }
+    case "teamFoul":        { const d = clamp(toInt(value), -10, 10); return `${T(team)} FOUL ${d > 0 ? "+1" : "−1"}`; }
+    case "teamFoulReset":   return isTeam(team) ? `${T(team)} FOULS CLEARED` : "FOULS CLEARED";
+    case "timeout":         { const d = clamp(toInt(value), -5, 5); return d < 0 ? `${T(team)} TIMEOUT` : `${T(team)} T.O. +1`; }
+    case "possession":      { const nv = isTeam(value) ? value : null; return `BALL → ${nv ? T(nv) : "—"}`; }
+    case "jumpBall":        return "JUMP BALL";
+    case "resetGame":       return "RESET GAME";
+    default:                return type;
+  }
+}
+function actionColor(s, type, team, value) {
+  if (type === "jumpBall") return "#FFD700";
+  if (type === "possession") { const nv = isTeam(value) ? value : null; return nv ? s[nv].color : "#8a91a6"; }
+  if (isTeam(team)) return s[team].color;
+  return "#8a91a6";
+}
+
+function pushHistory(cid, s, type, team, value) {
+  const h = history[cid]; if (!h) return;
+  h.unshift({
+    id: ++historySeq[cid],
+    label: actionLabel(s, type, team, value),
+    color: actionColor(s, type, team, value),
+    atTenths: liveClockTenths(cid, s),
+    snap: snapshotState(cid, s),
+  });
+  if (h.length > HISTORY_MAX) h.length = HISTORY_MAX;
+}
+
 // ── Action handler ─────────────────────────────────────────────────────────────
 function handleAction(cid, { type, team, value }) {
   const s = states[cid]; if (!s) return;
   try {
+    if (UNDOABLE.has(type)) pushHistory(cid, s, type, team, value);
     switch (type) {
       case "score": {
         if (!isTeam(team)) throw new Error(`bad team "${team}"`);
@@ -238,7 +326,13 @@ function handleAction(cid, { type, team, value }) {
         const f = mkState(cid); f.teamA.name=s.teamA.name; f.teamA.color=s.teamA.color; f.teamB.name=s.teamB.name; f.teamB.color=s.teamB.color;
         states[cid]=f; gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
       }
-      case "fullReset":     stopGame(cid,s); stopShot(cid,s); states[cid]=mkState(cid); gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
+      case "fullReset":     stopGame(cid,s); stopShot(cid,s); states[cid]=mkState(cid); gcMeta[cid]=null; scMeta[cid]=null; history[cid]=[]; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
+      case "undo": {
+        const h = history[cid]; if (!h || !h.length) return;
+        const entry = h.shift();
+        restoreSnapshot(cid, entry.snap);
+        break;
+      }
       default:              console.warn(`[?] unknown action "${type}"`); return;
     }
   } catch (err) { console.error(`[!] action error court=${cid} type=${type}:`, err.message); return; }
