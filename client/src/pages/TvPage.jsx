@@ -163,12 +163,13 @@ export default function TvPage() {
   const { theme, themeId, setThemeId, cycleTheme } = useTheme();
 
   useEffect(() => {
-    socket.on("connect",     () => setConnected(true));
+    const onConnect = () => { setConnected(true); socket.emit("joinCourt", courtId); };
+    socket.on("connect",     onConnect);
     socket.on("disconnect",  () => setConnected(false));
     socket.on("stateUpdate", s  => { if (s) setState(s); });
-    socket.emit("joinCourt", courtId);
+    if (socket.connected) { setConnected(true); socket.emit("joinCourt", courtId); }
     return () => {
-      socket.off("connect");
+      socket.off("connect",    onConnect);
       socket.off("disconnect");
       socket.off("stateUpdate");
     };

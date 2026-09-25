@@ -435,11 +435,12 @@ export default function ScoreboardPage(){
   },[send]);
 
   useEffect(()=>{
-    socket.on("connect",()=>setConn(true));
+    const onConnect = ()=>{setConn(true);socket.emit("joinCourt",courtId);};
+    socket.on("connect",onConnect);
     socket.on("disconnect",()=>setConn(false));
     socket.on("stateUpdate",s=>{if(s)setS(s);});
-    socket.emit("joinCourt",courtId);
-    return()=>{socket.off("connect");socket.off("disconnect");socket.off("stateUpdate");};
+    if(socket.connected){setConn(true);socket.emit("joinCourt",courtId);}
+    return()=>{socket.off("connect",onConnect);socket.off("disconnect");socket.off("stateUpdate");};
   },[courtId]);
 
   useEffect(()=>{
