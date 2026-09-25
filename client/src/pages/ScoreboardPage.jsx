@@ -28,6 +28,15 @@ function textOn(hex){
 
 const COLORS=["#FF6B35","#FF3333","#FF1493","#9B59B6","#3498DB","#00D4FF","#00E87A","#FFD700","#FFFFFF","#FF8C00"];
 
+// Shot clock is what the operator's eyes stay glued to second-to-second, so it
+// gets top billing (bigger + on top); the game clock is secondary reference.
+const DISPLAY_SIZES = {
+  sm: { shot:"clamp(72px,16vh,140px)",  game:"clamp(34px,6.5vh,60px)" },
+  md: { shot:"clamp(100px,20vh,180px)", game:"clamp(42px,8vh,76px)"  },
+  lg: { shot:"clamp(130px,25vh,230px)", game:"clamp(50px,9.5vh,92px)" },
+};
+const DISPLAY_SIZE_LABELS = [["sm","เล็ก"],["md","กลาง"],["lg","ใหญ่"]];
+
 function Kbd({children}){
   return <span style={{position:"absolute",top:6,right:8,fontFamily:"'JetBrains Mono',monospace",fontSize:11,
     fontWeight:500,padding:"1px 5px",borderRadius:4,border:"1px solid #343a4e",color:"#8a91a6"}}>{children}</span>;
@@ -134,7 +143,7 @@ function TeamControls({team,tKey,doScore,doFoul,doTimeout,kbd1,kbd2}){
 }
 
 /* ── Center scoreboard display ── */
-function CenterDisplay({state,send,doPossession,doJumpBall}){
+function CenterDisplay({state,send,doPossession,doJumpBall,displaySize}){
   const {clockTenths,isRunning,shotClockTenths,possession,gameOver,winner,isOvertime,teamA,teamB}=state;
   const shotSec=shotClockTenths/10, shotRed=shotSec<=5&&shotClockTenths>0;
   const status = gameOver?"FINAL":isOvertime?(isRunning?"OVERTIME":"OT · PAUSED"):isRunning?"RUNNING":"PAUSED";
@@ -144,24 +153,20 @@ function CenterDisplay({state,send,doPossession,doJumpBall}){
   else if(isOvertime){ subline="ต่อเวลา"; sublineColor="#ffc74d"; }
   const poss=(t)=> possession===t ? {bg:state[t].color,color:textOn(state[t].color),border:state[t].color} : {bg:"#171b27",color:"#8a91a6",border:"#2a3042"};
   const hp=poss("teamA"), ap=poss("teamB");
+  const sizes = DISPLAY_SIZES[displaySize]||DISPLAY_SIZES.md;
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:4,minHeight:0,background:"#0d1018",border:"1px solid #1f2433",
       borderRadius:20,padding:"12px 18px 14px",flex:1,justifyContent:"center"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:13,letterSpacing:".24em",color:"#7a8194",fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>GAME</span>
-        <div style={{flex:1}}/>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
         <span style={{width:8,height:8,borderRadius:"50%",background:statusColor}}/>
         <span style={{fontSize:15,letterSpacing:".2em",fontWeight:700,color:statusColor,fontFamily:"'Barlow Condensed',sans-serif"}}>{status}</span>
       </div>
-      <div style={{textAlign:"center",fontSize:"clamp(72px,15vh,150px)",fontWeight:800,lineHeight:.95,
-        fontFamily:"'Barlow Condensed',sans-serif",fontVariantNumeric:"tabular-nums",color:"#f4f5f8"}}>{fmt(clockTenths)}</div>
-      {subline&&<div style={{textAlign:"center",fontFamily:"'IBM Plex Sans Thai',sans-serif",fontSize:15,fontWeight:600,color:sublineColor}}>{subline}</div>}
 
-      <div style={{height:1,background:"#1f2433",margin:"6px 0"}}/>
+      {/* Shot clock — primary focus for the operator */}
       <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <span style={{fontSize:13,letterSpacing:".24em",color:"#7a8194",fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>SHOT</span>
-        <div style={{flex:1,textAlign:"center",fontSize:"clamp(56px,11vh,104px)",fontWeight:800,lineHeight:.95,
+        <span style={{fontSize:14,letterSpacing:".24em",color:"#7a8194",fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>SHOT</span>
+        <div style={{flex:1,textAlign:"center",fontSize:sizes.shot,fontWeight:800,lineHeight:.95,
           fontFamily:"'Barlow Condensed',sans-serif",fontVariantNumeric:"tabular-nums",
           color:shotRed?"#ff4d4d":"#f4f5f8"}}>{fmtS(shotClockTenths)}</div>
         <div style={{width:60}}/>
@@ -169,6 +174,17 @@ function CenterDisplay({state,send,doPossession,doJumpBall}){
       <div style={{height:6,borderRadius:3,background:"#1a1f2c",overflow:"hidden"}}>
         <div style={{height:"100%",width:`${Math.min(100,(shotClockTenths/120)*100)}%`,background:shotRed?"#ff4d4d":"#f4f5f8"}}/>
       </div>
+
+      <div style={{height:1,background:"#1f2433",margin:"6px 0"}}/>
+
+      {/* Game clock — secondary reference */}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:12,letterSpacing:".2em",color:"#7a8194",fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>GAME</span>
+        <div style={{flex:1,textAlign:"center",fontSize:sizes.game,fontWeight:800,lineHeight:.95,
+          fontFamily:"'Barlow Condensed',sans-serif",fontVariantNumeric:"tabular-nums",color:"#f4f5f8"}}>{fmt(clockTenths)}</div>
+        <div style={{width:34}}/>
+      </div>
+      {subline&&<div style={{textAlign:"center",fontFamily:"'IBM Plex Sans Thai',sans-serif",fontSize:14,fontWeight:600,color:sublineColor}}>{subline}</div>}
 
       {gameOver&&(
         <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:2}}>
@@ -253,7 +269,7 @@ function HistoryBar({history,undone,onUndo}){
 }
 
 /* ── Settings modal ── */
-function SettingsModal({state,send,doScore,doFoul,doTimeout,doClockAdjust,doShotAdjust,doShotReset,courtId,divisionId,divConfig,onClose,onOpenReset}){
+function SettingsModal({state,send,doScore,doFoul,doTimeout,doClockAdjust,doShotAdjust,doShotReset,courtId,divisionId,divConfig,displaySize,setDisplaySize,onClose,onOpenReset}){
   const {teamA,teamB}=state;
   const rows=[
     {label:"คะแนน", hv:teamA.score, av:teamB.score, hMinus:()=>doScore("teamA",-1), hPlus:()=>doScore("teamA",1), aMinus:()=>doScore("teamB",-1), aPlus:()=>doScore("teamB",1)},
@@ -299,6 +315,16 @@ function SettingsModal({state,send,doScore,doFoul,doTimeout,doClockAdjust,doShot
                   alignItems:"center",justifyContent:"center",fontSize:36,fontWeight:800,fontVariantNumeric:"tabular-nums",...F}}>{fmtS(state.shotClockTenths)}</div>
                 <button onClick={()=>doShotAdjust(10)} style={btn()}>+1</button>
                 <button onClick={doShotReset} style={btn()}>↺ 12</button>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <span style={{...F,fontSize:14,letterSpacing:".22em",color:"#7a8194",fontWeight:700}}>ขนาดจอ</span>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                {DISPLAY_SIZE_LABELS.map(([v,l])=>{const s=chip(v===displaySize); return(
+                  <button key={v} onClick={()=>setDisplaySize(v)} style={{height:52,borderRadius:12,
+                    border:`1px solid ${s.border}`,background:s.bg,color:s.color,fontSize:18,fontWeight:700,
+                    cursor:"pointer",...F}}>{l}</button>
+                );})}
               </div>
             </div>
           </div>
@@ -395,6 +421,13 @@ export default function ScoreboardPage(){
   const [mobileTab,setMobileTab] = useState("clock");
   const [modal,setModal] = useState(null); // null | "settings" | "reset"
   const [undone,setUndone]   = useState(null);
+  // Per-browser display-size preference (how big the shot/game clock render on
+  // this operator's own screen) — not game state, so it lives in localStorage
+  // rather than going through the server/socket.
+  const [displaySize,setDisplaySize] = useState(()=>{
+    try{ const v=localStorage.getItem("scoreboardDisplaySize"); return DISPLAY_SIZES[v]?v:"md"; }catch{ return "md"; }
+  });
+  useEffect(()=>{ try{ localStorage.setItem("scoreboardDisplaySize",displaySize); }catch{} },[displaySize]);
   const undoneTimer = useRef(null);
   const prevGC = useRef(null), prevSC = useRef(null);
   const stateRef = useRef(null); stateRef.current = state;
@@ -536,7 +569,7 @@ export default function ScoreboardPage(){
 
       <div className="board-grid" data-tab={mobileTab}>
         <TeamPanel team={state.teamA} tKey="teamA" send={send} state={state} align="left"/>
-        <CenterDisplay state={state} send={send} doPossession={doPossession} doJumpBall={doJumpBall}/>
+        <CenterDisplay state={state} send={send} doPossession={doPossession} doJumpBall={doJumpBall} displaySize={displaySize}/>
         <TeamPanel team={state.teamB} tKey="teamB" send={send} state={state} align="right"/>
       </div>
 
@@ -554,6 +587,7 @@ export default function ScoreboardPage(){
         <SettingsModal state={state} send={send} doScore={doScore} doFoul={doFoul} doTimeout={doTimeout}
           doClockAdjust={doClockAdjust} doShotAdjust={doShotAdjust} doShotReset={doShotReset}
           courtId={courtId} divisionId={divisionId} divConfig={divConfig}
+          displaySize={displaySize} setDisplaySize={setDisplaySize}
           onClose={()=>setModal(null)} onOpenReset={()=>setModal("reset")}/>
       )}
       {modal==="reset"&&(
