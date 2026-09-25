@@ -129,7 +129,7 @@ function broadcast(cid) {
   const p   = { ...s };
   if (s.isRunning   && gcMeta[cid]) p.clockTenths     = Math.max(0, gcMeta[cid].startTenths - Math.floor((now - gcMeta[cid].startAt) / 100));
   if (s.shotRunning && scMeta[cid]) p.shotClockTenths = Math.max(0, scMeta[cid].startTenths - Math.floor((now - scMeta[cid].startAt) / 100));
-  p.history = (history[cid]||[]).map(h => ({ id: h.id, label: h.label, color: h.color, atTenths: h.atTenths }));
+  p.history = (history[cid]||[]).map(h => ({ id: h.id, label: h.label, color: h.color, atTenths: h.atTenths, removable: REVERSIBLE.has(h.type) }));
   io.to(`court:${cid}`).emit("stateUpdate", p);
 }
 
@@ -207,9 +207,72 @@ const clamp   = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // Actions worth remembering on the undo stack. teamName/teamColor/fullReset are
 // deliberately excluded — setup changes, not in-game corrections.
 const UNDOABLE = new Set([
-  "score","clockToggle","clockAdjust","shotClockToggle","shotClockSet","shotClockAdjust",
+  "score","scoreCorrect","clockToggle","clockAdjust","shotClockToggle","shotClockSet","shotClockAdjust",
   "teamFoul","teamFoulReset","timeout","possession","jumpBall","resetGame",
 ]);
+
+// Action types that are pure additive counters/clock nudges — safe to reverse
+// in isolation by re-applying the negated value straight onto *current* state,
+// regardless of what else has happened since. Toggle/set-style actions
+// (clockToggle, shotClockSet, possession, jumpBall, resetGame, ...) aren't in
+// this set: "undo just this one" has no safe meaning for them once anything
+// later has touched the same field, so they stay undo-able only via the
+// sequential UNDO button (oldest-in-first-out, restoring a full snapshot).
+const REVERSIBLE = new Set(["score","scoreCorrect","teamFoul","timeout","clockAdjust","shotClockAdjust"]);
+
+// Applies one of the REVERSIBLE mutations. Used both for the live action (see
+// the switch in handleAction) and, with a negated value, to remove a single
+// past history entry (see the "removeHistory" case) without touching
+// anything that happened after it. "score" resets the shot clock (a made
+// basket does that); "scoreCorrect" — used by the Settings stat-correction
+// stepper and by removeHistory's inverse of a "score" entry — deliberately
+// does not, since fixing a mis-recorded point total isn't a new possession.
+function applyReversible(cid, s, type, team, value) {
+  switch (type) {
+    case "score": {
+      const d = clamp(toInt(value), -50, 50); if (!d) return;
+      if (s.gameOver && d > 0) return;
+      s[team].score = Math.max(0, s[team].score + d);
+      if (d > 0) { stopShot(cid, s); s.shotClockTenths = SHOT_DEFAULT; }
+      checkWin(cid); return;
+    }
+    case "scoreCorrect": {
+      const d = clamp(toInt(value), -50, 50); if (!d) return;
+      s[team].score = Math.max(0, s[team].score + d);
+      checkWin(cid); return;
+    }
+    case "teamFoul":
+      s[team].teamFouls = Math.max(0, s[team].teamFouls + clamp(toInt(value), -10, 10)); return;
+    case "timeout":
+      s[team].timeouts = clamp(s[team].timeouts + clamp(toInt(value), -5, 5), 0, MAX_TO); return;
+    case "clockAdjust": {
+      const d = clamp(toInt(value), -36000, 36000);
+      if (s.isRunning && gcMeta[cid]) gcMeta[cid].startTenths = Math.max(0, gcMeta[cid].startTenths + d);
+      s.clockTenths = Math.max(0, s.clockTenths + d); return;
+    }
+    case "shotClockAdjust": {
+      const d = clamp(toInt(value), -120, 120);
+      if (s.shotRunning && scMeta[cid]) scMeta[cid].startTenths = clamp(scMeta[cid].startTenths + d, 0, SHOT_DEFAULT);
+      s.shotClockTenths = clamp(s.shotClockTenths + d, 0, SHOT_DEFAULT); return;
+    }
+  }
+}
+
+// Keeps older history snapshots consistent after removeHistory splices an
+// entry out — every entry *newer* than the removed one had already captured
+// its effect, so subtract it back out of those snapshots too. Otherwise a
+// later sequential UNDO that reaches back past this point would resurrect
+// the removed value.
+function adjustSnapshotField(snap, type, team, delta) {
+  if (!snap) return;
+  switch (type) {
+    case "score": case "scoreCorrect": snap[team].score = Math.max(0, snap[team].score - delta); return;
+    case "teamFoul":       snap[team].teamFouls = Math.max(0, snap[team].teamFouls - delta); return;
+    case "timeout":        snap[team].timeouts = clamp(snap[team].timeouts - delta, 0, MAX_TO); return;
+    case "clockAdjust":    snap.clockTenths = Math.max(0, snap.clockTenths - delta); return;
+    case "shotClockAdjust":snap.shotClockTenths = clamp(snap.shotClockTenths - delta, 0, SHOT_DEFAULT); return;
+  }
+}
 
 function liveClockTenths(cid, s) {
   return (s.isRunning && gcMeta[cid])
@@ -249,6 +312,7 @@ function actionLabel(s, type, team, value) {
   const T = t => (s[t] && s[t].name) || (t === "teamA" ? "HOME" : "AWAY");
   switch (type) {
     case "score":           { const d = clamp(toInt(value), -50, 50); return `${T(team)} ${d > 0 ? "+" : ""}${d}`; }
+    case "scoreCorrect":    { const d = clamp(toInt(value), -50, 50); return `${T(team)} แก้ ${d > 0 ? "+" : ""}${d}`; }
     case "clockToggle":     return s.isRunning ? "STOP" : "START";
     case "clockAdjust":     { const d = clamp(toInt(value), -36000, 36000), a = Math.abs(d);
                                const lab = a >= 600 ? `${a / 600}M` : a >= 100 ? `${a / 100}0S` : `${a / 10}S`;
@@ -276,6 +340,7 @@ function pushHistory(cid, s, type, team, value) {
   const h = history[cid]; if (!h) return;
   h.unshift({
     id: ++historySeq[cid],
+    type, team, value,
     label: actionLabel(s, type, team, value),
     color: actionColor(s, type, team, value),
     atTenths: liveClockTenths(cid, s),
@@ -290,32 +355,22 @@ function handleAction(cid, { type, team, value }) {
   try {
     if (UNDOABLE.has(type)) pushHistory(cid, s, type, team, value);
     switch (type) {
-      case "score": {
+      case "score":
         if (!isTeam(team)) throw new Error(`bad team "${team}"`);
-        const d = clamp(toInt(value), -50, 50); if (!d) break;
-        if (s.gameOver && d > 0) break;
-        s[team].score = Math.max(0, s[team].score + d);
-        if (d > 0) { stopShot(cid, s); s.shotClockTenths = SHOT_DEFAULT; }
-        checkWin(cid); break;
-      }
+        applyReversible(cid, s, "score", team, value); break;
+      case "scoreCorrect":
+        if (!isTeam(team)) throw new Error(`bad team "${team}"`);
+        applyReversible(cid, s, "scoreCorrect", team, value); break;
       case "clockToggle":   if (!s.gameOver) { s.isRunning ? stopGame(cid, s) : startGame(cid, s); } break;
       case "clockReset":    stopGame(cid, s); s.clockTenths = GAME_DEFAULT; s.gameOver = false; s.winner = null; s.isOvertime = false; break;
-      case "clockAdjust": {
-        const d = clamp(toInt(value), -36000, 36000);
-        if (s.isRunning && gcMeta[cid]) gcMeta[cid].startTenths = Math.max(0, gcMeta[cid].startTenths + d);
-        s.clockTenths = Math.max(0, s.clockTenths + d); break;
-      }
+      case "clockAdjust":   applyReversible(cid, s, "clockAdjust", team, value); break;
       case "clockSet":      stopGame(cid, s); s.clockTenths = Math.max(0, toInt(value) * 10); break;
       case "shotClockToggle": s.shotRunning ? stopShot(cid, s) : startShot(cid, s); break;
       case "shotClockSet":  stopShot(cid, s); s.shotClockTenths = clamp(toInt(value ?? 12), 0, 12) * 10; break;
-      case "shotClockAdjust": {
-        const d = clamp(toInt(value), -120, 120);
-        if (s.shotRunning && scMeta[cid]) scMeta[cid].startTenths = clamp(scMeta[cid].startTenths + d, 0, SHOT_DEFAULT);
-        s.shotClockTenths = clamp(s.shotClockTenths + d, 0, SHOT_DEFAULT); break;
-      }
-      case "teamFoul":      if (!isTeam(team)) throw new Error(`bad team`); s[team].teamFouls = Math.max(0, s[team].teamFouls + clamp(toInt(value), -10, 10)); break;
+      case "shotClockAdjust": applyReversible(cid, s, "shotClockAdjust", team, value); break;
+      case "teamFoul":      if (!isTeam(team)) throw new Error(`bad team`); applyReversible(cid, s, "teamFoul", team, value); break;
       case "teamFoulReset": isTeam(team) ? (s[team].teamFouls = 0) : (s.teamA.teamFouls = s.teamB.teamFouls = 0); break;
-      case "timeout":       if (!isTeam(team)) throw new Error(`bad team`); s[team].timeouts = clamp(s[team].timeouts + clamp(toInt(value), -5, 5), 0, MAX_TO); break;
+      case "timeout":       if (!isTeam(team)) throw new Error(`bad team`); applyReversible(cid, s, "timeout", team, value); break;
       case "possession":    s.possession = isTeam(value) ? value : null; s.jumpBall = false; break;
       case "jumpBall":      s.jumpBall = !s.jumpBall; s.possession = null; break;
       case "teamName":      if (!isTeam(team)) throw new Error(`bad team`); s[team].name = String(value||"").slice(0,24).toUpperCase().trim()||"TEAM"; break;
@@ -331,6 +386,18 @@ function handleAction(cid, { type, team, value }) {
         const h = history[cid]; if (!h || !h.length) return;
         const entry = h.shift();
         restoreSnapshot(cid, entry.snap);
+        break;
+      }
+      case "removeHistory": {
+        const h = history[cid]; if (!h || !h.length) return;
+        const idx = h.findIndex(e => e.id === toInt(value));
+        if (idx === -1) return;
+        const entry = h[idx];
+        if (!REVERSIBLE.has(entry.type)) return;
+        const invType = entry.type === "score" ? "scoreCorrect" : entry.type;
+        applyReversible(cid, s, invType, entry.team, -entry.value);
+        for (let k = 0; k < idx; k++) adjustSnapshotField(h[k].snap, entry.type, entry.team, entry.value);
+        h.splice(idx, 1);
         break;
       }
       default:              console.warn(`[?] unknown action "${type}"`); return;

@@ -52,14 +52,14 @@ function FoulPips({count}){
   );
 }
 
-function ColorDot({color,onPick}){
+function ColorDot({color,onPick,align="left"}){
   const [o,setO]=useState(false);
   return(
     <div style={{position:"relative"}}>
       <button onClick={e=>{e.stopPropagation();setO(v=>!v);}} title="เปลี่ยนสีทีม" style={{width:14,height:14,borderRadius:"50%",
         background:color,border:"2px solid rgba(0,0,0,0.35)",cursor:"pointer",flexShrink:0}}/>
       {o&&(
-        <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:20,left:0,zIndex:80,background:"#0f1219",
+        <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:20,[align==="right"?"right":"left"]:0,zIndex:80,background:"#0f1219",
           border:"1px solid #262b3a",borderRadius:12,padding:8,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>
           {COLORS.map(c=>(
             <button key={c} onClick={()=>{onPick(c);setO(false);}}
@@ -88,7 +88,7 @@ function TeamPanel({team,tKey,send,state,align}){
       background:"#10131c",border:"1px solid #1f2433",borderRadius:20,overflow:"hidden"}}>
       <div style={{height:52,flex:"none",display:"flex",alignItems:"center",gap:10,padding:"0 14px",
         background:team.color,color:txt,flexDirection:flip?"row-reverse":"row"}}>
-        <ColorDot color={team.color} onPick={c=>send("teamColor",tKey,c)}/>
+        <ColorDot color={team.color} onPick={c=>send("teamColor",tKey,c)} align={flip?"right":"left"}/>
         {editing
           ?<input autoFocus value={input} maxLength={20} onChange={e=>setInput(e.target.value.toUpperCase())}
               onBlur={save} onKeyDown={e=>e.key==="Enter"&&save()}
@@ -241,7 +241,7 @@ function CenterControls({state,doClockToggle,doShotReset,doShotToggle,onHorn}){
 }
 
 /* ── Bottom bar: undo + recent-action ticker ── */
-function HistoryBar({history,undone,onUndo}){
+function HistoryBar({history,undone,onUndo,onRemove}){
   return(
     <div style={{flex:"none",display:"flex",alignItems:"center",gap:10,height:64}}>
       <button onClick={onUndo} disabled={history.length===0} style={{height:64,padding:"0 22px",borderRadius:12,
@@ -254,25 +254,35 @@ function HistoryBar({history,undone,onUndo}){
       <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8,overflow:"hidden"}}>
         {undone&&<div style={{flex:"none",height:44,display:"flex",alignItems:"center",padding:"0 12px",borderRadius:10,
           background:"#231d3a",color:"#c9bfff",fontSize:16,fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>↶ {undone}</div>}
-        {history.slice(0,6).map((h,i)=>(
-          <div key={h.id} style={{flex:"none",height:44,display:"flex",alignItems:"center",gap:8,padding:"0 12px",
-            borderRadius:10,border:"1px solid #1f2433",background:"#0e1118",opacity:1-i*0.15}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:h.color}}/>
-            <span style={{fontSize:16,fontWeight:600,letterSpacing:".04em",whiteSpace:"nowrap",color:"#dfe2ea",
-              fontFamily:"'Barlow Condensed',sans-serif"}}>{h.label}</span>
-            <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#6c7388"}}>{fmt(h.atTenths)}</span>
-          </div>
-        ))}
+        {history.slice(0,6).map((h,i)=>{
+          const Tag = h.removable ? "button" : "div";
+          return (
+            <Tag key={h.id} type={h.removable?"button":undefined}
+              onClick={h.removable?()=>onRemove(h.id,h.label):undefined}
+              title={h.removable?"คลิกเพื่อยกเลิกรายการนี้ (ไม่กระทบรายการอื่น)":undefined}
+              style={{flex:"none",height:44,display:"flex",alignItems:"center",gap:8,padding:"0 10px 0 12px",
+                borderRadius:10,border:"1px solid #1f2433",background:"#0e1118",opacity:1-i*0.15,
+                cursor:h.removable?"pointer":"default",font:"inherit",color:"inherit"}}>
+              <span style={{width:8,height:8,borderRadius:"50%",background:h.color,flexShrink:0}}/>
+              <span style={{fontSize:16,fontWeight:600,letterSpacing:".04em",whiteSpace:"nowrap",color:"#dfe2ea",
+                fontFamily:"'Barlow Condensed',sans-serif"}}>{h.label}</span>
+              <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:"#6c7388"}}>{fmt(h.atTenths)}</span>
+              {h.removable&&<span style={{fontSize:13,fontWeight:700,color:"#ff6b6b",marginLeft:2}}>✕</span>}
+            </Tag>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /* ── Settings modal ── */
-function SettingsModal({state,send,doScore,doFoul,doTimeout,doClockAdjust,doShotAdjust,doShotReset,courtId,divisionId,divConfig,displaySize,setDisplaySize,onClose,onOpenReset}){
+function SettingsModal({state,send,doScoreCorrect,doFoul,doTimeout,doClockAdjust,doShotAdjust,doShotReset,courtId,divisionId,divConfig,displaySize,setDisplaySize,onClose,onOpenReset}){
   const {teamA,teamB}=state;
   const rows=[
-    {label:"คะแนน", hv:teamA.score, av:teamB.score, hMinus:()=>doScore("teamA",-1), hPlus:()=>doScore("teamA",1), aMinus:()=>doScore("teamB",-1), aPlus:()=>doScore("teamB",1)},
+    // Score here is a stat correction (doScoreCorrect), not a live basket — it
+    // must not reset the shot clock the way the main +1/+2 buttons do.
+    {label:"คะแนน", hv:teamA.score, av:teamB.score, hMinus:()=>doScoreCorrect("teamA",-1), hPlus:()=>doScoreCorrect("teamA",1), aMinus:()=>doScoreCorrect("teamB",-1), aPlus:()=>doScoreCorrect("teamB",1)},
     {label:"ฟาวล์", hv:teamA.teamFouls, av:teamB.teamFouls, hMinus:()=>doFoul("teamA",-1), hPlus:()=>doFoul("teamA",1), aMinus:()=>doFoul("teamB",-1), aPlus:()=>doFoul("teamB",1)},
     {label:"T.O.", hv:teamA.timeouts, av:teamB.timeouts, hMinus:()=>send("timeout","teamA",-1), hPlus:()=>send("timeout","teamA",1), aMinus:()=>send("timeout","teamB",-1), aPlus:()=>send("timeout","teamB",1)},
   ];
@@ -436,6 +446,10 @@ export default function ScoreboardPage(){
   // keeps the actual history stack and reverts to an exact prior snapshot, so
   // every viewer of this court sees the same undo, not just this browser tab.
   const doScore       = useCallback((tKey,delta)=>send("score",tKey,delta),[send]);
+  // Stat correction, not a live basket — unlike doScore, this never resets the
+  // shot clock (see server's "scoreCorrect" handling). Used by the Settings
+  // score stepper, for fixing a mis-recorded point total after the fact.
+  const doScoreCorrect= useCallback((tKey,delta)=>send("scoreCorrect",tKey,delta),[send]);
   const doFoul        = useCallback((tKey,delta)=>send("teamFoul",tKey,delta),[send]);
   const doTimeout     = useCallback((tKey)=>{
     const s=stateRef.current; if(!s||s[tKey].timeouts<=0) return;
@@ -461,6 +475,16 @@ export default function ScoreboardPage(){
     send("undo");
     clearTimeout(undoneTimer.current);
     setUndone(top.label);
+    undoneTimer.current=setTimeout(()=>setUndone(null),2500);
+  },[send]);
+
+  // Remove one specific history entry (e.g. a score credited to the wrong
+  // team) without touching anything that happened after it — unlike UNDO,
+  // which always rolls back the single most recent action.
+  const removeHistoryEntry = useCallback((id,label)=>{
+    send("removeHistory",null,id);
+    clearTimeout(undoneTimer.current);
+    setUndone(label);
     undoneTimer.current=setTimeout(()=>setUndone(null),2500);
   },[send]);
 
@@ -580,11 +604,11 @@ export default function ScoreboardPage(){
       </div>
 
       <div className="history-bar" data-tab={mobileTab}>
-        <HistoryBar history={state.history||[]} undone={undone} onUndo={undo}/>
+        <HistoryBar history={state.history||[]} undone={undone} onUndo={undo} onRemove={removeHistoryEntry}/>
       </div>
 
       {modal==="settings"&&(
-        <SettingsModal state={state} send={send} doScore={doScore} doFoul={doFoul} doTimeout={doTimeout}
+        <SettingsModal state={state} send={send} doScoreCorrect={doScoreCorrect} doFoul={doFoul} doTimeout={doTimeout}
           doClockAdjust={doClockAdjust} doShotAdjust={doShotAdjust} doShotReset={doShotReset}
           courtId={courtId} divisionId={divisionId} divConfig={divConfig}
           displaySize={displaySize} setDisplaySize={setDisplaySize}
