@@ -52,14 +52,14 @@ function FoulPips({count}){
   );
 }
 
-function ColorDot({color,onPick}){
+function ColorDot({color,onPick,align="left"}){
   const [o,setO]=useState(false);
   return(
     <div style={{position:"relative"}}>
       <button onClick={e=>{e.stopPropagation();setO(v=>!v);}} title="เปลี่ยนสีทีม" style={{width:14,height:14,borderRadius:"50%",
         background:color,border:"2px solid rgba(0,0,0,0.35)",cursor:"pointer",flexShrink:0}}/>
       {o&&(
-        <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:20,left:0,zIndex:80,background:"#0f1219",
+        <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:20,[align==="right"?"right":"left"]:0,zIndex:80,background:"#0f1219",
           border:"1px solid #262b3a",borderRadius:12,padding:8,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:5}}>
           {COLORS.map(c=>(
             <button key={c} onClick={()=>{onPick(c);setO(false);}}
@@ -88,7 +88,7 @@ function TeamPanel({team,tKey,send,state,align}){
       background:"#10131c",border:"1px solid #1f2433",borderRadius:20,overflow:"hidden"}}>
       <div style={{height:52,flex:"none",display:"flex",alignItems:"center",gap:10,padding:"0 14px",
         background:team.color,color:txt,flexDirection:flip?"row-reverse":"row"}}>
-        <ColorDot color={team.color} onPick={c=>send("teamColor",tKey,c)}/>
+        <ColorDot color={team.color} onPick={c=>send("teamColor",tKey,c)} align={flip?"right":"left"}/>
         {editing
           ?<input autoFocus value={input} maxLength={20} onChange={e=>setInput(e.target.value.toUpperCase())}
               onBlur={save} onKeyDown={e=>e.key==="Enter"&&save()}
