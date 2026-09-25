@@ -35,7 +35,7 @@ const COND  = "'Barlow Condensed',sans-serif";
 /* ─── Team name row ────────────────────────────────────────────────────────── */
 function TeamName({ team, align, hasBall }) {
   const nl = team.name.length;
-  const fs = nl <= 10 ? 66 : nl <= 16 ? 50 : 36;
+  const fs = nl <= 10 ? "clamp(28px,6vw,66px)" : nl <= 16 ? "clamp(22px,5vw,50px)" : "clamp(18px,4vw,36px)";
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:8,
       alignItems: align === "left" ? "flex-start" : "flex-end" }}>
@@ -64,11 +64,12 @@ function ScoreBox({ team, theme }) {
   const D = (dim, bright) => (theme.highContrast ? bright : dim);
   return (
     <div style={{
-      width:330, height:260, display:"flex", alignItems:"center", justifyContent:"center",
-      border:`5px solid ${D("rgba(255,255,255,0.7)","#FFFFFF")}`, borderRadius:20,
+      width:"clamp(130px,22vw,330px)", height:"clamp(100px,22vh,260px)", display:"flex",
+      alignItems:"center", justifyContent:"center",
+      border:`clamp(3px,0.4vw,5px) solid ${D("rgba(255,255,255,0.7)","#FFFFFF")}`, borderRadius:20,
       background:"rgba(0,0,0,0.3)", flexShrink:0,
     }}>
-      <span style={{ fontFamily:BEBAS, fontSize:200, lineHeight:1, color:"#FFF" }}>
+      <span style={{ fontFamily:BEBAS, fontSize:"clamp(56px,min(9vw,18vh),200px)", lineHeight:1, color:"#FFF" }}>
         {String(Math.max(0, team.score)).padStart(2,"0")}
       </span>
     </div>
@@ -86,11 +87,11 @@ function FoulsBox({ team, theme }) {
         FOULS{bonus ? " · BONUS" : ""}
       </span>
       <div style={{
-        width:120, height:95, display:"flex", alignItems:"center", justifyContent:"center",
-        border:`4px solid ${bonus ? "#FF3333" : D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")}`,
+        width:"clamp(70px,10vw,120px)", height:"clamp(55px,9vh,95px)", display:"flex", alignItems:"center", justifyContent:"center",
+        border:`clamp(2.5px,0.3vw,4px) solid ${bonus ? "#FF3333" : D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")}`,
         borderRadius:16, background:"rgba(0,0,0,0.3)",
       }}>
-        <span style={{ fontFamily:BEBAS, fontSize:66, color: bonus ? "#FF3333" : "#FFF" }}>
+        <span style={{ fontFamily:BEBAS, fontSize:"clamp(28px,min(5vw,7vh),66px)", color: bonus ? "#FF3333" : "#FFF" }}>
           {team.teamFouls}
         </span>
       </div>
@@ -110,32 +111,32 @@ function CenterClock({ state, courtId, divConfig, theme }) {
   const gameEnd    = clockTenths === 0;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10, width:420, flexShrink:0 }}>
-      <div style={{ fontFamily:COND, fontSize:18, fontWeight:800, letterSpacing:"0.4em",
-        color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)") }}>
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"clamp(4px,1vh,10px)", width:"clamp(180px,30vw,420px)", flexShrink:0 }}>
+      <div style={{ fontFamily:COND, fontSize:"clamp(11px,1.4vw,18px)", fontWeight:800, letterSpacing:"0.4em",
+        color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"), textAlign:"center" }}>
         สนาม {courtId} · {divConfig.label.toUpperCase()}
       </div>
 
       {jumpBall && (
         <div style={{ padding:"4px 18px", background:"rgba(255,255,255,0.07)",
           border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
-          fontFamily:COND, fontSize:18, fontWeight:800, color:D("rgba(255,255,255,0.6)","rgba(255,255,255,0.9)"),
+          fontFamily:COND, fontSize:"clamp(12px,1.4vw,18px)", fontWeight:800, color:D("rgba(255,255,255,0.6)","rgba(255,255,255,0.9)"),
           letterSpacing:"0.2em" }}>⊕ JUMP BALL</div>
       )}
 
       {/* Game clock — the running match time */}
-      <div style={{ fontFamily:BEBAS, fontSize:92, lineHeight:1,
+      <div style={{ fontFamily:BEBAS, fontSize:"clamp(40px,min(7vw,9vh),92px)", lineHeight:1,
         color: gameEnd ? "#FF3333" : isRunning ? "#FFF" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"),
         textShadow: gameEnd ? "0 0 40px rgba(255,30,30,0.7)" : "none" }}>
         {fmtClock(clockTenths)}
       </div>
 
       {/* Shot clock — the big broadcast-style number */}
-      <div style={{ fontFamily:BEBAS, fontSize:170, lineHeight:0.9, fontWeight:900, color:shotColor }}>
+      <div style={{ fontFamily:BEBAS, fontSize:"clamp(72px,min(13vw,16vh),170px)", lineHeight:0.9, fontWeight:900, color:shotColor }}>
         {fmtShot(shotClockTenths)}
       </div>
 
-      <div style={{ fontFamily:COND, fontSize:16, fontWeight:700, letterSpacing:"0.3em",
+      <div style={{ fontFamily:COND, fontSize:"clamp(10px,1.2vw,16px)", fontWeight:700, letterSpacing:"0.3em",
         color: D("rgba(255,255,255,0.2)","rgba(255,255,255,0.7)") }}>
         #3X3BASKETBALL
       </div>
@@ -232,7 +233,7 @@ export default function TvPage() {
 
       {/* Main scoreboard */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-        justifyContent:"center", gap:36, padding:"0 60px" }}>
+        justifyContent:"center", gap:"clamp(12px,3vh,36px)", padding:"0 clamp(12px,4vw,60px)", minHeight:0, overflow:"hidden" }}>
 
         {winTeam && (
           <div style={{ padding:"10px 26px", background:"rgba(255,215,0,0.1)",
@@ -255,7 +256,7 @@ export default function TvPage() {
         </div>
 
         {/* Score + clock row */}
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", maxWidth:1400, gap:24 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", maxWidth:1400, gap:"clamp(10px,2vw,24px)" }}>
           <ScoreBox team={state.teamA} theme={theme} />
           <CenterClock state={state} courtId={courtId} divConfig={divConfig} theme={theme} />
           <ScoreBox team={state.teamB} theme={theme} />
