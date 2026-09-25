@@ -19,7 +19,7 @@ const unlock = () => {
 const playHorn   = () => { if(!audioCtx?.horn)   return; unlock(); audioCtx.horn.currentTime=0;   audioCtx.horn.play().catch(()=>{}); };
 const playBuzzer = () => { if(!audioCtx?.buzzer) return; unlock(); audioCtx.buzzer.currentTime=0; audioCtx.buzzer.play().catch(()=>{}); };
 
-function fmt(t){const s=Math.max(0,t);if(s>600){const x=Math.floor(s/10);return`${String(Math.floor(x/60)).padStart(2,"0")}:${String(x%60).padStart(2,"0")}`}return`${String(Math.floor(s/10)).padStart(2,"0")}.${s%10}`;}
+function fmt(t){const s=Math.max(0,t);if(s>=600){const x=Math.floor(s/10);return`${String(Math.floor(x/60)).padStart(2,"0")}:${String(x%60).padStart(2,"0")}`}return`${String(Math.floor(s/10)).padStart(2,"0")}.${s%10}`;}
 function fmtS(t){const s=Math.max(0,t);if(s>120)return String(Math.ceil(s/10));return`${Math.floor(s/10)}.${s%10}`;}
 
 const COLORS=["#FF6B35","#FF3333","#FF1493","#9B59B6","#3498DB","#00D4FF","#00E87A","#FFD700","#FFFFFF","#FF8C00"];
@@ -264,7 +264,7 @@ function CenterPanel({state,send,onHorn,theme}){
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>
           {[{l:"+1m",v:600,neg:false},{l:"+10s",v:100,neg:false},{l:"+1s",v:10,neg:false},
-            {l:"-1s",v:-10,neg:true},{l:"-10s",v:-100,neg:true},{l:"-1m",v:-600,neg:true}].map(b=>(
+            {l:"-1m",v:-600,neg:true},{l:"-10s",v:-100,neg:true},{l:"-1s",v:-10,neg:true}].map(b=>(
             <button key={b.l} onClick={()=>send("clockAdjust",null,b.v)}
               style={Btn({padding:"7px 0",fontSize:12,background:neutralBtn,border:`1.5px solid ${neutralBorder}`,
                 color:b.neg?D("rgba(255,120,120,0.75)","rgba(255,120,120,0.95)"):neutralText})}>{b.l}</button>

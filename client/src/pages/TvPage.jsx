@@ -17,7 +17,7 @@ import { useTheme, ThemeSwitcher } from "../theme.jsx";
 
 function fmtClock(tenths) {
   const t = Math.max(0, tenths);
-  if (t > 600) {
+  if (t >= 600) {
     const s = Math.floor(t / 10);
     return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
   }
