@@ -14,7 +14,7 @@ import { THEMES } from "../theme.jsx";
 
 function fmtClock(t) {
   t = Math.max(0, t);
-  if (t > 600) {
+  if (t >= 600) {
     const s = Math.floor(t / 10);
     return `${String(Math.floor(s / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
   }
