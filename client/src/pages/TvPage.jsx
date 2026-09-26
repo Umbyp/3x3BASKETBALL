@@ -7,7 +7,7 @@
  * (สีทีม + สีแดง/เหลืองสำหรับสถานะเตือน/นับถอยหลัง เท่านั้น)
  * - ไม่มีปุ่ม operator
  * - Theme [D]: เลือกธีมให้เหมาะกับสถานการณ์ (มืด/แดดจ้า/อารีน่า/พลบค่ำ)
- * - Shot clock [S]: เปิด/ปิดการแสดง shot clock (จำค่าไว้ในเครื่องนี้)
+ * - Shot clock: operator เปิด/ปิดการแสดงได้จากหน้า Scoreboard (Settings)
  */
 
 import { useState, useEffect } from "react";
@@ -170,15 +170,9 @@ export default function TvPage() {
   const { theme, themeId, setThemeId, cycleTheme } = useTheme();
 
   const [showSelector, setShowSelector] = useState(false);
-  // Per-screen display preference — not game state, so it lives in localStorage
-  const [showShot, setShowShot] = useState(() => {
-    try { return localStorage.getItem("tvShowShotClock") !== "0"; } catch { return true; }
-  });
-  useEffect(() => { try { localStorage.setItem("tvShowShotClock", showShot ? "1" : "0"); } catch {} }, [showShot]);
   useEffect(() => {
     const h = e => {
       if (e.key === "c" || e.key === "C") setShowSelector(v=>!v);
-      else if (e.key === "s" || e.key === "S") setShowShot(v=>!v);
       else if (e.key === "d" || e.key === "D") cycleTheme();
     };
     window.addEventListener("keydown", h);
@@ -202,6 +196,7 @@ export default function TvPage() {
     </div>
   );
 
+  const showShot = state.showShotClock !== false;
   const winTeam = state.winner === "teamA" ? state.teamA : state.winner === "teamB" ? state.teamB : null;
 
   return (
@@ -235,14 +230,6 @@ export default function TvPage() {
               background: connected ? "#00E87A" : "#FF5050",
               animation: connected && state.isRunning ? "pulse-slow 1.5s infinite" : "none" }}/>
             {connected ? (state.isRunning ? "LIVE" : "READY") : "OFFLINE"}
-          </div>
-          <div onClick={() => setShowShot(v=>!v)} style={{ cursor:"pointer",
-            fontFamily:COND, fontSize:11, fontWeight:800, padding:"3px 10px", borderRadius:8,
-            letterSpacing:"0.1em",
-            background: showShot ? "rgba(255,255,255,0.1)" : "transparent",
-            border:`1px solid ${showShot ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)"}`,
-            color: showShot ? "#FFF" : "rgba(255,255,255,0.4)" }}>
-            SHOT CLOCK {showShot ? "ON" : "OFF"} <span style={{ opacity:.6, fontSize:9 }}>[S]</span>
           </div>
           <ThemeSwitcher themeId={themeId} setThemeId={setThemeId} />
           <div onClick={() => setShowSelector(v=>!v)} style={{ cursor:"pointer",

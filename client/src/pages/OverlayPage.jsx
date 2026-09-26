@@ -218,8 +218,8 @@ export default function OverlayPage() {
           <TeamBox team={teamB} tKey="teamB" possession={possession} flip={true} theme={theme}/>
         </div>
 
-        {/* Shot clock tab */}
-        <div style={{
+        {/* Shot clock tab — operator can hide it from Scoreboard settings */}
+        {state.showShotClock !== false && <div style={{
           marginTop:-1, padding:"4px 22px",
           background: shotUrgent ? "rgba(200,0,0,0.93)" : theme.overlayBg,
           borderBottomLeftRadius:10, borderBottomRightRadius:10,
@@ -234,7 +234,7 @@ export default function OverlayPage() {
             {fmtShot(shotClockTenths)}
           </span>
           <span style={{ fontFamily:C, fontSize:11, color:D("rgba(255,255,255,0.2)","rgba(255,255,255,0.6)") }}>3x3=12s</span>
-        </div>
+        </div>}
 
       </div>
     </div>

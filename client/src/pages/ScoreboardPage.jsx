@@ -326,6 +326,13 @@ function SettingsModal({state,send,doScoreCorrect,doFoul,doTimeout,doClockAdjust
                 <button onClick={()=>doShotAdjust(10)} style={btn()}>+1</button>
                 <button onClick={doShotReset} style={btn()}>↺ 12</button>
               </div>
+              {(()=>{const on=state.showShotClock!==false; return(
+                <button onClick={()=>send("shotClockVisible",null,!on)} style={{height:52,borderRadius:12,
+                  border:`1px solid ${on?"#1f9d5a":"#3a2328"}`,background:on?"#0f2a1c":"#1a1216",
+                  color:on?"#4fe39a":"#ff7b7b",fontSize:18,fontWeight:700,cursor:"pointer",...F}}>
+                  แสดงบนจอ TV / Overlay: {on?"เปิด":"ปิด"}
+                </button>
+              );})()}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <span style={{...F,fontSize:14,letterSpacing:".22em",color:"#7a8194",fontWeight:700}}>ขนาดจอ</span>

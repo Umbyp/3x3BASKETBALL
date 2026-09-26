@@ -71,6 +71,7 @@ function mkState(courtId) {
     shotClockTenths: SHOT_DEFAULT, shotRunning: false,
     possession: null, jumpBall: false,
     gameOver: false, winner: null, isOvertime: false,
+    showShotClock: true, // display setting for TV/overlay — not part of undo snapshots
   };
 }
 
@@ -374,11 +375,12 @@ function handleAction(cid, { type, team, value }) {
       case "possession":    s.possession = isTeam(value) ? value : null; s.jumpBall = false; break;
       case "jumpBall":      s.jumpBall = !s.jumpBall; s.possession = null; break;
       case "teamName":      if (!isTeam(team)) throw new Error(`bad team`); s[team].name = String(value||"").slice(0,24).toUpperCase().trim()||"TEAM"; break;
+      case "shotClockVisible": s.showShotClock = value === true; break;
       case "teamColor":     if (!isTeam(team)||!isColor(value)) throw new Error(`bad color`); s[team].color = value; break;
       case "startOvertime": stopGame(cid,s); stopShot(cid,s); s.gameOver=false; s.winner=null; s.isOvertime=true; s.clockTenths=OT_DEFAULT; s.shotClockTenths=SHOT_DEFAULT; break;
       case "resetGame": {
         stopGame(cid,s); stopShot(cid,s);
-        const f = mkState(cid); f.teamA.name=s.teamA.name; f.teamA.color=s.teamA.color; f.teamB.name=s.teamB.name; f.teamB.color=s.teamB.color;
+        const f = mkState(cid); f.teamA.name=s.teamA.name; f.teamA.color=s.teamA.color; f.teamB.name=s.teamB.name; f.teamB.color=s.teamB.color; f.showShotClock=s.showShotClock;
         states[cid]=f; gcMeta[cid]=null; scMeta[cid]=null; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
       }
       case "fullReset":     stopGame(cid,s); stopShot(cid,s); states[cid]=mkState(cid); gcMeta[cid]=null; scMeta[cid]=null; history[cid]=[]; broadcast(cid); dirty[cid]=true; scheduleSave(cid); return;
