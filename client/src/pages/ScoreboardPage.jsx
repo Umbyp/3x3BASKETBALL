@@ -5,7 +5,8 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { DIVISIONS, COURTS, RULES } from "../constants.js";
+import { COURTS, RULES } from "../constants.js";
+import { useDivisions, findDivision } from "../divisions.js";
 import TournamentBridge from "../components/scoreboard/TournamentBridge.jsx";
 import { useGameState } from "./useGameState.js";
 
@@ -280,7 +281,7 @@ function HistoryBar({history,undone,onUndo,onRemove}){
 }
 
 /* ── Settings modal ── */
-function SettingsModal({state,send,doScoreCorrect,doFoul,doTimeout,doClockAdjust,doShotAdjust,doShotReset,courtId,divisionId,divConfig,displaySize,setDisplaySize,onClose,onOpenReset}){
+function SettingsModal({state,send,doScoreCorrect,doFoul,doTimeout,doClockAdjust,doShotAdjust,doShotReset,courtId,divisionId,divConfig,divisions,displaySize,setDisplaySize,onClose,onOpenReset}){
   const {teamA,teamB}=state;
   const rows=[
     // Score here is a stat correction (doScoreCorrect), not a live basket — it
@@ -375,9 +376,9 @@ function SettingsModal({state,send,doScoreCorrect,doFoul,doTimeout,doClockAdjust
             </div>
             <div style={{display:"grid",gridTemplateColumns:"80px minmax(0,1fr)",gap:8,alignItems:"center"}}>
               <span style={{fontSize:14,letterSpacing:".18em",color:"#7a8194",fontWeight:700,...F}}>รุ่น</span>
-              <div style={{display:"flex",gap:8}}>
-                {DIVISIONS.map(d=>{const s=chip(d.id===divisionId);return(
-                  <a key={d.id} href={`/scoreboard?court=${courtId}&division=${d.id}`} style={{flex:1,height:64,
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {divisions.map(d=>{const s=chip(d.id===divisionId);return(
+                  <a key={d.id} href={`/scoreboard?court=${courtId}&division=${d.id}`} style={{flex:"1 1 90px",minWidth:0,height:64,padding:"0 6px",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
                     borderRadius:12,border:`1px solid ${s.border}`,background:s.bg,color:s.color,fontSize:18,fontWeight:700,
                     cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",textDecoration:"none",...F}}>{d.label.toUpperCase()}</a>
                 );})}
@@ -435,8 +436,9 @@ export default function ScoreboardPage(){
   const [sp]           = useSearchParams();
   const nav            = useNavigate();
   const courtId        = (sp.get("court")||"A").toUpperCase();
-  const divisionId     = sp.get("division")||"open";
-  const divConfig      = DIVISIONS.find(d=>d.id===divisionId)||DIVISIONS[0];
+  const divisions      = useDivisions();
+  const divisionId     = sp.get("division")||divisions[0].id;
+  const divConfig      = findDivision(divisions,divisionId);
   const { state, connected: conn, send } = useGameState(courtId);
   const [mobileTab,setMobileTab] = useState("clock");
   const [modal,setModal] = useState(null); // null | "settings" | "reset"
@@ -620,7 +622,7 @@ export default function ScoreboardPage(){
       {modal==="settings"&&(
         <SettingsModal state={state} send={send} doScoreCorrect={doScoreCorrect} doFoul={doFoul} doTimeout={doTimeout}
           doClockAdjust={doClockAdjust} doShotAdjust={doShotAdjust} doShotReset={doShotReset}
-          courtId={courtId} divisionId={divisionId} divConfig={divConfig}
+          courtId={courtId} divisionId={divisionId} divConfig={divConfig} divisions={divisions}
           displaySize={displaySize} setDisplaySize={setDisplaySize}
           onClose={()=>setModal(null)} onOpenReset={()=>setModal("reset")}/>
       )}

@@ -11,6 +11,10 @@ export const GROUP_COLORS = {
   B:{ text:"text-blue-400",    bg:"bg-blue-500/20",    border:"border-blue-500/30"    },
   C:{ text:"text-emerald-400", bg:"bg-emerald-500/20", border:"border-emerald-500/30" },
   D:{ text:"text-purple-400",  bg:"bg-purple-500/20",  border:"border-purple-500/30"  },
+  E:{ text:"text-pink-400",    bg:"bg-pink-500/20",    border:"border-pink-500/30"    },
+  F:{ text:"text-teal-400",    bg:"bg-teal-500/20",    border:"border-teal-500/30"    },
+  G:{ text:"text-yellow-400",  bg:"bg-yellow-500/20",  border:"border-yellow-500/30"  },
+  H:{ text:"text-rose-400",    bg:"bg-rose-500/20",    border:"border-rose-500/30"    },
 };
 export const DEFAULT_TEAMS = {
   open:  { A:["TEAM A1","TEAM A2","TEAM A3","TEAM A4"], B:["TEAM B1","TEAM B2","TEAM B3","TEAM B4"], C:["TEAM C1","TEAM C2","TEAM C3","TEAM C4"], D:["TEAM D1","TEAM D2","TEAM D3","TEAM D4"] },

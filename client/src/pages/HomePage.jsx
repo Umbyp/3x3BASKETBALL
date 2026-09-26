@@ -1,8 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { COURTS, DIVISIONS } from "../constants.js";
+import { COURTS } from "../constants.js";
+import { useDivisions } from "../divisions.js";
 
 export default function HomePage() {
   const nav = useNavigate();
+  const DIVISIONS = useDivisions();
   const go = (path, p = {}) => nav(`${path}?${new URLSearchParams(p)}`);
 
   const Card = ({ title, color, icon, children, description }) => (
