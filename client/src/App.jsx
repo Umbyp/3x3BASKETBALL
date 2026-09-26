@@ -5,6 +5,7 @@ import TvPage         from "./pages/TvPage.jsx";
 import OverlayPage    from "./pages/OverlayPage.jsx";
 import TournamentPage from "./pages/TournamentPage.jsx";
 import MonitorPage    from "./pages/MonitorPage.jsx";
+import AdminPage      from "./pages/AdminPage.jsx";
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/overlay"    element={<OverlayPage />} />
         <Route path="/tournament" element={<TournamentPage />} />
         <Route path="/monitor"    element={<MonitorPage />} />
+        <Route path="/admin"      element={<AdminPage />} />
         <Route path="*"           element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

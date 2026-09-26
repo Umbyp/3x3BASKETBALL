@@ -1,7 +1,8 @@
 /**
  * 🎮 ScoreboardPage — Operator control
  * /scoreboard?court=A&division=open
- * Keyboard: SPACE=clock, C=shot hold, Z=12s, H=horn, Q/W=home +1/+2, O/P=away +1/+2, CTRL+Z=undo, E=settings
+ * Keyboard: SPACE=clock, C=shot hold, Z=12s, H=horn, Q/W=home +1/+2, O/P=away +1/+2,
+ *           A/S=home FT made/miss, K/L=away FT made/miss, CTRL+Z=undo, E=settings
  */
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -116,6 +117,9 @@ function TeamPanel({team,tKey,send,state,align}){
         <FoulPips count={team.teamFouls}/>
         <span style={{minWidth:26,textAlign:flip?"left":"right",fontSize:28,fontWeight:700,lineHeight:1,
           fontFamily:"'Barlow Condensed',sans-serif",fontVariantNumeric:"tabular-nums"}}>{team.teamFouls}</span>
+        <span style={{marginInlineStart:10,paddingInlineStart:12,borderInlineStart:"1px solid #262b3a",fontSize:13,letterSpacing:".15em",color:"#7a8194",fontWeight:700}}>FT</span>
+        <span style={{fontSize:22,fontWeight:700,lineHeight:1,color:"#c8ccd6",fontFamily:"'Barlow Condensed',sans-serif",
+          fontVariantNumeric:"tabular-nums"}}>{team.ftMade||0}/{team.ftAtt||0}</span>
       </div>
       <div style={{flex:"none",height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:10,
         background:bonus?"#ffb020":"transparent",color:"#140c02",fontSize:18,fontWeight:800,letterSpacing:".1em"}}>
@@ -126,10 +130,10 @@ function TeamPanel({team,tKey,send,state,align}){
 }
 
 /* ── Team controls — the buttons an operator actually presses ── */
-function TeamControls({team,tKey,doScore,doFoul,doTimeout,kbd1,kbd2}){
+function TeamControls({team,tKey,doScore,doFoul,doTimeout,doFT,kbd1,kbd2,kbdFtMade,kbdFtMiss}){
   const txt = textOn(team.color);
   return(
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"104px 72px",gap:8}}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gridTemplateRows:"104px 72px 60px",gap:8}}>
       <button onClick={()=>doScore(tKey,1)} style={{position:"relative",borderRadius:14,border:`1px solid ${team.color}55`,
         background:`${team.color}1c`,color:"#fff",fontSize:52,fontWeight:700,cursor:"pointer",
         fontFamily:"'Barlow Condensed',sans-serif"}}>+1<Kbd>{kbd1}</Kbd></button>
@@ -142,6 +146,13 @@ function TeamControls({team,tKey,doScore,doFoul,doTimeout,kbd1,kbd2}){
       <button onClick={()=>doTimeout(tKey)} disabled={team.timeouts<=0} style={{borderRadius:12,border:"1px solid #262b3a",
         background:"#12151e",color:"#e8eaf0",fontSize:22,fontWeight:700,letterSpacing:".06em",cursor:"pointer",
         opacity:team.timeouts<=0?.4:1,fontFamily:"'Barlow Condensed',sans-serif"}}>{team.timeouts>0?"T.O. ●":"T.O. ○"}</button>
+      {/* Free throws — made = +1 and an attempt, missed = attempt only */}
+      <button onClick={()=>doFT(tKey,true)} style={{position:"relative",borderRadius:12,border:"1px solid #1f5a3c",
+        background:"#0f2119",color:"#4fe39a",fontSize:20,fontWeight:700,letterSpacing:".06em",cursor:"pointer",
+        fontFamily:"'Barlow Condensed',sans-serif"}}>FT ✓ +1<Kbd>{kbdFtMade}</Kbd></button>
+      <button onClick={()=>doFT(tKey,false)} style={{position:"relative",borderRadius:12,border:"1px solid #4a2530",
+        background:"#1a1216",color:"#ff7b7b",fontSize:20,fontWeight:700,letterSpacing:".06em",cursor:"pointer",
+        fontFamily:"'Barlow Condensed',sans-serif"}}>FT ✗ MISS<Kbd>{kbdFtMiss}</Kbd></button>
     </div>
   );
 }
@@ -245,7 +256,7 @@ function CenterControls({state,doClockToggle,doShotReset,doShotToggle,onHorn}){
 }
 
 /* ── Bottom bar: undo + recent-action ticker ── */
-function HistoryBar({history,undone,onUndo,onRemove}){
+function HistoryBar({history,undone,onUndo,onRemove,onOpen}){
   return(
     <div style={{flex:"none",display:"flex",alignItems:"center",gap:10,height:64}}>
       <button onClick={onUndo} disabled={history.length===0} style={{height:64,padding:"0 22px",borderRadius:12,
@@ -258,7 +269,7 @@ function HistoryBar({history,undone,onUndo,onRemove}){
       <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:8,overflow:"hidden"}}>
         {undone&&<div style={{flex:"none",height:44,display:"flex",alignItems:"center",padding:"0 12px",borderRadius:10,
           background:"#231d3a",color:"#c9bfff",fontSize:16,fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>↶ {undone}</div>}
-        {history.slice(0,6).map((h,i)=>{
+        {history.slice(0,5).map((h,i)=>{
           const Tag = h.removable ? "button" : "div";
           return (
             <Tag key={h.id} type={h.removable?"button":undefined}
@@ -275,6 +286,53 @@ function HistoryBar({history,undone,onUndo,onRemove}){
             </Tag>
           );
         })}
+      </div>
+      <button onClick={onOpen} style={{height:64,padding:"0 18px",borderRadius:12,border:"1px solid #262b3a",
+        background:"#12151e",color:"#e8eaf0",fontSize:20,fontWeight:700,letterSpacing:".06em",cursor:"pointer",
+        flexShrink:0,fontFamily:"'Barlow Condensed',sans-serif"}}>📜 HISTORY ({history.length})</button>
+    </div>
+  );
+}
+
+/* ── Full history — every recorded action, newest first ── */
+function HistoryModal({history,teamA,teamB,onRemove,onUndo,onClose}){
+  const [filter,setFilter]=useState("all");
+  const F={fontFamily:"'Barlow Condensed',sans-serif"};
+  const list=history.filter(h=>filter==="all"||(filter==="ft"?h.ft:h.team===filter));
+  const chipS=on=>({height:40,padding:"0 14px",borderRadius:10,border:`1px solid ${on?"#e8eaf0":"#262b3a"}`,
+    background:on?"#262b3a":"#161a24",color:on?"#f4f5f8":"#7a8194",fontSize:16,fontWeight:700,cursor:"pointer",...F});
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:60,background:"rgba(4,5,8,.8)",display:"flex",
+      alignItems:"center",justifyContent:"center",padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"min(720px,96vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",
+        background:"#10131c",border:"1px solid #262b3a",borderRadius:20,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid #1f2433"}}>
+          <span style={{...F,fontSize:24,fontWeight:800,letterSpacing:".1em",color:"#f4f5f8"}}>📜 HISTORY · {history.length} รายการ</span>
+          <button onClick={onClose} style={{width:44,height:40,borderRadius:10,border:"1px solid #262b3a",background:"#161a24",color:"#e8eaf0",fontSize:18,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"flex",gap:6,padding:"12px 18px",flexWrap:"wrap"}}>
+          {[["all","ทั้งหมด"],["teamA",teamA.name],["teamB",teamB.name],["ft","Free throw"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setFilter(v)} style={chipS(filter===v)}>{l}</button>
+          ))}
+        </div>
+        <div style={{overflowY:"auto",padding:"0 18px 12px"}}>
+          {!list.length&&<div style={{...F,color:"#6c7388",fontSize:16,textAlign:"center",padding:"24px 0"}}>ยังไม่มีรายการ</div>}
+          {list.map((h,i)=>(
+            <div key={h.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 4px",borderBottom:"1px solid #1a1e2a"}}>
+              <span style={{fontFamily:"'JetBrains Mono',monospace",fontSize:13,color:"#6c7388",width:52,flexShrink:0}}>{fmt(h.atTenths)}</span>
+              <span style={{width:10,height:10,borderRadius:"50%",background:h.color,flexShrink:0}}/>
+              <span style={{...F,flex:1,minWidth:0,fontSize:19,fontWeight:600,color:"#dfe2ea",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.label}</span>
+              {filter==="all"&&i===0&&<button onClick={onUndo} style={{...F,height:34,padding:"0 12px",borderRadius:8,border:"1px solid #3a3350",
+                background:"#171425",color:"#d6ccff",fontSize:15,fontWeight:700,cursor:"pointer"}}>↶ UNDO</button>}
+              {h.removable&&<button onClick={()=>{if(window.confirm(`ยกเลิกรายการ "${h.label}"? (ไม่กระทบรายการอื่น)`))onRemove(h.id,h.label);}}
+                style={{...F,height:34,padding:"0 12px",borderRadius:8,border:"1px solid #4a2530",background:"#1a1216",color:"#ff7b7b",
+                fontSize:15,fontWeight:700,cursor:"pointer"}}>✕ ยกเลิก</button>}
+            </div>
+          ))}
+        </div>
+        <div style={{...F,padding:"10px 18px 14px",borderTop:"1px solid #1f2433",fontSize:14,color:"#6c7388"}}>
+          ✕ ยกเลิก = ลบเฉพาะรายการนั้น (คะแนน/ฟาวล์/FT/ปรับเวลา) · UNDO = ย้อนรายการล่าสุด
+        </div>
       </div>
     </div>
   );
@@ -441,7 +499,7 @@ export default function ScoreboardPage(){
   const divConfig      = findDivision(divisions,divisionId);
   const { state, connected: conn, send } = useGameState(courtId);
   const [mobileTab,setMobileTab] = useState("clock");
-  const [modal,setModal] = useState(null); // null | "settings" | "reset"
+  const [modal,setModal] = useState(null); // null | "settings" | "reset" | "history"
   const [undone,setUndone]   = useState(null);
   // Per-browser display-size preference (how big the shot/game clock render on
   // this operator's own screen) — not game state, so it lives in localStorage
@@ -463,6 +521,7 @@ export default function ScoreboardPage(){
   // score stepper, for fixing a mis-recorded point total after the fact.
   const doScoreCorrect= useCallback((tKey,delta)=>send("scoreCorrect",tKey,delta),[send]);
   const doFoul        = useCallback((tKey,delta)=>send("teamFoul",tKey,delta),[send]);
+  const doFT          = useCallback((tKey,made)=>send(made?"ftMade":"ftMiss",tKey,1),[send]);
   const doTimeout     = useCallback((tKey)=>{
     const s=stateRef.current; if(!s||s[tKey].timeouts<=0) return;
     send("timeout",tKey,-1); playHorn();
@@ -520,10 +579,14 @@ export default function ScoreboardPage(){
       else if(e.key==="w"||e.key==="W"){e.preventDefault();doScore("teamA",2);}
       else if(e.key==="o"||e.key==="O"){e.preventDefault();doScore("teamB",1);}
       else if(e.key==="p"||e.key==="P"){e.preventDefault();doScore("teamB",2);}
+      else if(e.key==="a"||e.key==="A"){e.preventDefault();doFT("teamA",true);}
+      else if(e.key==="s"||e.key==="S"){e.preventDefault();doFT("teamA",false);}
+      else if(e.key==="k"||e.key==="K"){e.preventDefault();doFT("teamB",true);}
+      else if(e.key==="l"||e.key==="L"){e.preventDefault();doFT("teamB",false);}
     };
     window.addEventListener("keydown",h);
     return()=>window.removeEventListener("keydown",h);
-  },[doClockToggle,doShotToggle,doShotReset,doScore,undo]);
+  },[doClockToggle,doShotToggle,doShotReset,doScore,doFT,undo]);
 
   if(!state) return(
     <div style={{minHeight:"100vh",background:"#07080c",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
@@ -610,13 +673,13 @@ export default function ScoreboardPage(){
       </div>
 
       <div className="control-grid" data-tab={mobileTab}>
-        <TeamControls team={state.teamA} tKey="teamA" doScore={doScore} doFoul={doFoul} doTimeout={doTimeout} kbd1="Q" kbd2="W"/>
+        <TeamControls team={state.teamA} tKey="teamA" doScore={doScore} doFoul={doFoul} doTimeout={doTimeout} doFT={doFT} kbd1="Q" kbd2="W" kbdFtMade="A" kbdFtMiss="S"/>
         <CenterControls state={state} doClockToggle={doClockToggle} doShotReset={doShotReset} doShotToggle={doShotToggle} onHorn={playHorn}/>
-        <TeamControls team={state.teamB} tKey="teamB" doScore={doScore} doFoul={doFoul} doTimeout={doTimeout} kbd1="O" kbd2="P"/>
+        <TeamControls team={state.teamB} tKey="teamB" doScore={doScore} doFoul={doFoul} doTimeout={doTimeout} doFT={doFT} kbd1="O" kbd2="P" kbdFtMade="K" kbdFtMiss="L"/>
       </div>
 
       <div className="history-bar" data-tab={mobileTab}>
-        <HistoryBar history={state.history||[]} undone={undone} onUndo={undo} onRemove={removeHistoryEntry}/>
+        <HistoryBar history={state.history||[]} undone={undone} onUndo={undo} onRemove={removeHistoryEntry} onOpen={()=>setModal("history")}/>
       </div>
 
       {modal==="settings"&&(
@@ -625,6 +688,10 @@ export default function ScoreboardPage(){
           courtId={courtId} divisionId={divisionId} divConfig={divConfig} divisions={divisions}
           displaySize={displaySize} setDisplaySize={setDisplaySize}
           onClose={()=>setModal(null)} onOpenReset={()=>setModal("reset")}/>
+      )}
+      {modal==="history"&&(
+        <HistoryModal history={state.history||[]} teamA={state.teamA} teamB={state.teamB}
+          onRemove={removeHistoryEntry} onUndo={undo} onClose={()=>setModal(null)}/>
       )}
       {modal==="reset"&&(
         <ResetConfirm state={state} onCancel={()=>setModal("settings")} onConfirm={()=>{send("resetGame");setModal(null);}}/>

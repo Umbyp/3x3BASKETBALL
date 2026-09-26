@@ -90,7 +90,7 @@ export default function HomePage() {
              </Card>
 
              <Card title="Tournament Admin" color="#FBBF24" icon="🗂️" description="Divisions, teams & group draw">
-                <button onClick={() => go("/tournament", { division: DIVISIONS[0].id, admin: 1 })}
+                <button onClick={() => nav("/admin")}
                   className="w-full mt-4 py-4 rounded-xl text-sm font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black transition-all duration-300">
                   จัดการรุ่น / ทีม / แบ่งสาย
                 </button>

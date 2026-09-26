@@ -43,7 +43,7 @@ const GAME_DEFAULT = 6000;  // 10 นาที (tenths)
 const OT_DEFAULT   = 3000;  // OT 5 นาที
 const WIN_SCORE    = 21;
 const MAX_TO       = 1;
-const HISTORY_MAX  = 30;
+const HISTORY_MAX  = 200;
 
 // ── Express + Socket.io ────────────────────────────────────────────────────────
 const app    = express();
@@ -65,8 +65,8 @@ app.get("/health", (_req, res) =>
 function mkState(courtId) {
   return {
     courtId,
-    teamA: { name: "HOME", score: 0, teamFouls: 0, timeouts: MAX_TO, color: "#FF6B35" },
-    teamB: { name: "AWAY", score: 0, teamFouls: 0, timeouts: MAX_TO, color: "#00D4FF" },
+    teamA: { name: "HOME", score: 0, teamFouls: 0, timeouts: MAX_TO, color: "#FF6B35", ftMade: 0, ftAtt: 0 },
+    teamB: { name: "AWAY", score: 0, teamFouls: 0, timeouts: MAX_TO, color: "#00D4FF", ftMade: 0, ftAtt: 0 },
     clockTenths: GAME_DEFAULT, isRunning: false,
     shotClockTenths: SHOT_DEFAULT, shotRunning: false,
     possession: null, jumpBall: false,
@@ -131,7 +131,8 @@ function broadcast(cid) {
   const p   = { ...s };
   if (s.isRunning   && gcMeta[cid]) p.clockTenths     = Math.max(0, gcMeta[cid].startTenths - Math.floor((now - gcMeta[cid].startAt) / 100));
   if (s.shotRunning && scMeta[cid]) p.shotClockTenths = Math.max(0, scMeta[cid].startTenths - Math.floor((now - scMeta[cid].startAt) / 100));
-  p.history = (history[cid]||[]).map(h => ({ id: h.id, label: h.label, color: h.color, atTenths: h.atTenths, removable: REVERSIBLE.has(h.type) }));
+  p.history = (history[cid]||[]).map(h => ({ id: h.id, label: h.label, color: h.color, atTenths: h.atTenths, removable: REVERSIBLE.has(h.type),
+    team: isTeam(h.team) ? h.team : h.type === "possession" && isTeam(h.value) ? h.value : null, ft: h.type === "ftMade" || h.type === "ftMiss" }));
   io.to(`court:${cid}`).emit("stateUpdate", p);
 }
 
@@ -210,7 +211,7 @@ const clamp   = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // deliberately excluded — setup changes, not in-game corrections.
 const UNDOABLE = new Set([
   "score","scoreCorrect","clockToggle","clockAdjust","shotClockToggle","shotClockSet","shotClockAdjust",
-  "teamFoul","teamFoulReset","timeout","possession","jumpBall","resetGame",
+  "teamFoul","teamFoulReset","timeout","possession","jumpBall","resetGame","ftMade","ftMiss",
 ]);
 
 // Action types that are pure additive counters/clock nudges — safe to reverse
@@ -220,7 +221,7 @@ const UNDOABLE = new Set([
 // this set: "undo just this one" has no safe meaning for them once anything
 // later has touched the same field, so they stay undo-able only via the
 // sequential UNDO button (oldest-in-first-out, restoring a full snapshot).
-const REVERSIBLE = new Set(["score","scoreCorrect","teamFoul","timeout","clockAdjust","shotClockAdjust"]);
+const REVERSIBLE = new Set(["score","scoreCorrect","teamFoul","timeout","clockAdjust","shotClockAdjust","ftMade","ftMiss"]);
 
 // Applies one of the REVERSIBLE mutations. Used both for the live action (see
 // the switch in handleAction) and, with a negated value, to remove a single
@@ -245,6 +246,21 @@ function applyReversible(cid, s, type, team, value) {
     }
     case "teamFoul":
       s[team].teamFouls = Math.max(0, s[team].teamFouls + clamp(toInt(value), -10, 10)); return;
+    // Free throws: made = +1 point and one attempt; missed = attempt only.
+    // A made free throw doesn't reset the shot clock mid-trip (only the
+    // following check-ball does, which the operator handles with "12").
+    case "ftMade": {
+      const d = clamp(toInt(value), -1, 1); if (!d) return;
+      if (s.gameOver && d > 0) return;
+      s[team].score = Math.max(0, s[team].score + d);
+      s[team].ftMade = Math.max(0, (s[team].ftMade || 0) + d);
+      s[team].ftAtt  = Math.max(0, (s[team].ftAtt  || 0) + d);
+      checkWin(cid); return;
+    }
+    case "ftMiss": {
+      const d = clamp(toInt(value), -1, 1); if (!d) return;
+      s[team].ftAtt = Math.max(0, (s[team].ftAtt || 0) + d); return;
+    }
     case "timeout":
       s[team].timeouts = clamp(s[team].timeouts + clamp(toInt(value), -5, 5), 0, MAX_TO); return;
     case "clockAdjust": {
@@ -270,6 +286,10 @@ function adjustSnapshotField(snap, type, team, delta) {
   switch (type) {
     case "score": case "scoreCorrect": snap[team].score = Math.max(0, snap[team].score - delta); return;
     case "teamFoul":       snap[team].teamFouls = Math.max(0, snap[team].teamFouls - delta); return;
+    case "ftMade":         snap[team].score = Math.max(0, snap[team].score - delta);
+                           snap[team].ftMade = Math.max(0, (snap[team].ftMade || 0) - delta);
+                           snap[team].ftAtt = Math.max(0, (snap[team].ftAtt || 0) - delta); return;
+    case "ftMiss":         snap[team].ftAtt = Math.max(0, (snap[team].ftAtt || 0) - delta); return;
     case "timeout":        snap[team].timeouts = clamp(snap[team].timeouts - delta, 0, MAX_TO); return;
     case "clockAdjust":    snap.clockTenths = Math.max(0, snap.clockTenths - delta); return;
     case "shotClockAdjust":snap.shotClockTenths = clamp(snap.shotClockTenths - delta, 0, SHOT_DEFAULT); return;
@@ -323,6 +343,8 @@ function actionLabel(s, type, team, value) {
     case "shotClockSet":    return `SHOT → ${clamp(toInt(value ?? 12), 0, 12)}`;
     case "shotClockAdjust": { const d = clamp(toInt(value), -120, 120); return `SHOT ${d > 0 ? "+" : "−"}${Math.abs(d) / 10}S`; }
     case "teamFoul":        { const d = clamp(toInt(value), -10, 10); return `${T(team)} FOUL ${d > 0 ? "+1" : "−1"}`; }
+    case "ftMade":          return `${T(team)} FT ✓ +1`;
+    case "ftMiss":          return `${T(team)} FT ✗`;
     case "teamFoulReset":   return isTeam(team) ? `${T(team)} FOULS CLEARED` : "FOULS CLEARED";
     case "timeout":         { const d = clamp(toInt(value), -5, 5); return d < 0 ? `${T(team)} TIMEOUT` : `${T(team)} T.O. +1`; }
     case "possession":      { const nv = isTeam(value) ? value : null; return `BALL → ${nv ? T(nv) : "—"}`; }
@@ -371,6 +393,8 @@ function handleAction(cid, { type, team, value }) {
       case "shotClockSet":  stopShot(cid, s); s.shotClockTenths = clamp(toInt(value ?? 12), 0, 12) * 10; break;
       case "shotClockAdjust": applyReversible(cid, s, "shotClockAdjust", team, value); break;
       case "teamFoul":      if (!isTeam(team)) throw new Error(`bad team`); applyReversible(cid, s, "teamFoul", team, value); break;
+      case "ftMade": case "ftMiss":
+        if (!isTeam(team)) throw new Error(`bad team`); applyReversible(cid, s, type, team, value); break;
       case "teamFoulReset": isTeam(team) ? (s[team].teamFouls = 0) : (s.teamA.teamFouls = s.teamB.teamFouls = 0); break;
       case "timeout":       if (!isTeam(team)) throw new Error(`bad team`); applyReversible(cid, s, "timeout", team, value); break;
       case "possession":    s.possession = isTeam(value) ? value : null; s.jumpBall = false; break;
@@ -425,7 +449,7 @@ function handleAction(cid, { type, team, value }) {
 // is the single source of team data: loading a game pulls names/colours from
 // tournament_data, and score changes are written back by this server (Admin
 // SDK), so clients never write tournament data directly.
-const SCORE_ACTIONS = new Set(["score","scoreCorrect","undo","removeHistory","resetGame"]);
+const SCORE_ACTIONS = new Set(["score","scoreCorrect","ftMade","undo","removeHistory","resetGame"]);
 const gameSyncTimers = {};
 
 async function writeGame(division, gameId, fields) {
@@ -578,7 +602,7 @@ function cleanTeams(list) {
     return {
       id: t.id, name, short: str(t.short, 6).toUpperCase(), color: isColor(t.color) ? t.color : "#FF6B35",
       logo: /^https?:\/\//.test(logo) ? logo : "",
-      roster: (Array.isArray(t.roster) ? t.roster : []).slice(0, 20).map(p => ({ no: str(p?.no, 3), name: str(p?.name, 40) })).filter(p => p.name),
+      roster: (Array.isArray(t.roster) ? t.roster : []).slice(0, 20).map(p => ({ no: str(p?.no, 3), name: str(p?.name, 40), pts: Math.max(0, Math.min(9999, toInt(p?.pts))) })).filter(p => p.name),
     };
   });
 }
