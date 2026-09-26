@@ -304,7 +304,7 @@ export default function TvPage() {
       <div style={{ flexShrink:0, textAlign:"center", padding:"6px 0 8px", zoom: scale, fontFamily:COND,
         fontSize:"clamp(10px,1.2vw,16px)", fontWeight:700, letterSpacing:"0.3em",
         color: theme.highContrast ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)" }}>
-        MADE BY ENABLEBRAIN
+        BY ENABLEBRAIN
       </div>
 
       {/* Bottom accent — thin team-color identifiers only */}
