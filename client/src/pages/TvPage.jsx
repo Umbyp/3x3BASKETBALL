@@ -7,6 +7,7 @@
  * (สีทีม + สีแดง/เหลืองสำหรับสถานะเตือน/นับถอยหลัง เท่านั้น)
  * - ไม่มีปุ่ม operator
  * - Theme [D]: เลือกธีมให้เหมาะกับสถานการณ์ (มืด/แดดจ้า/อารีน่า/พลบค่ำ)
+ * - Shot clock [S]: เปิด/ปิดการแสดง shot clock (จำค่าไว้ในเครื่องนี้)
  */
 
 import { useState, useEffect } from "react";
@@ -35,18 +36,21 @@ const COND  = "'Barlow Condensed',sans-serif";
 /* ─── Team name row ────────────────────────────────────────────────────────── */
 function TeamName({ team, align, hasBall }) {
   const nl = team.name.length;
-  const fs = nl <= 10 ? "clamp(28px,6vw,66px)" : nl <= 16 ? "clamp(22px,5vw,50px)" : "clamp(18px,4vw,36px)";
+  // Scales with the screen (width and height) so names stay proportional on big TVs
+  const fs = nl <= 10 ? "clamp(28px,min(6.5vw,12vh),200px)"
+           : nl <= 16 ? "clamp(22px,min(5vw,9vh),150px)"
+           :            "clamp(18px,min(3.6vw,7vh),110px)";
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8,
+    <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:"48%",
       alignItems: align === "left" ? "flex-start" : "flex-end" }}>
-      <div style={{ height:26, display:"flex", alignItems:"center", gap:8,
+      <div style={{ height:"clamp(26px,2vw,36px)", display:"flex", alignItems:"center", gap:8,
         flexDirection: align === "left" ? "row" : "row-reverse" }}>
         {hasBall && (
           <span style={{ display:"flex", alignItems:"center", gap:8,
             flexDirection: align === "left" ? "row" : "row-reverse" }}>
-            <span style={{ width:11, height:11, borderRadius:"50%", background: team.color,
+            <span style={{ width:"clamp(11px,0.8vw,18px)", height:"clamp(11px,0.8vw,18px)", borderRadius:"50%", background: team.color,
               boxShadow:`0 0 10px ${team.color}` }}/>
-            <span style={{ fontFamily:COND, fontSize:17, fontWeight:800, letterSpacing:"0.25em",
+            <span style={{ fontFamily:COND, fontSize:"clamp(17px,1.3vw,26px)", fontWeight:800, letterSpacing:"0.25em",
               color: team.color }}>BALL</span>
           </span>
         )}
@@ -100,7 +104,7 @@ function FoulsBox({ team, theme }) {
 }
 
 /* ─── Center clock column ──────────────────────────────────────────────────── */
-function CenterClock({ state, courtId, divConfig, theme }) {
+function CenterClock({ state, courtId, divConfig, theme, showShot }) {
   const { clockTenths, isRunning, shotClockTenths, jumpBall, possession, teamA, teamB } = state;
   const D = (dim, bright) => (theme.highContrast ? bright : dim);
 
@@ -125,16 +129,20 @@ function CenterClock({ state, courtId, divConfig, theme }) {
       )}
 
       {/* Game clock — the running match time */}
-      <div style={{ fontFamily:BEBAS, fontSize:"clamp(40px,min(7vw,9vh),92px)", lineHeight:1,
+      <div style={{ fontFamily:BEBAS, lineHeight:1,
+        // Without the shot clock, the game clock takes over the big slot
+        fontSize: showShot ? "clamp(40px,min(7vw,9vh),92px)" : "clamp(72px,min(13vw,20vh),220px)",
         color: gameEnd ? "#FF3333" : isRunning ? "#FFF" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"),
         textShadow: gameEnd ? "0 0 40px rgba(255,30,30,0.7)" : "none" }}>
         {fmtClock(clockTenths)}
       </div>
 
       {/* Shot clock — the big broadcast-style number */}
-      <div style={{ fontFamily:BEBAS, fontSize:"clamp(72px,min(13vw,16vh),170px)", lineHeight:0.9, fontWeight:900, color:shotColor }}>
-        {fmtShot(shotClockTenths)}
-      </div>
+      {showShot && (
+        <div style={{ fontFamily:BEBAS, fontSize:"clamp(72px,min(13vw,16vh),170px)", lineHeight:0.9, fontWeight:900, color:shotColor }}>
+          {fmtShot(shotClockTenths)}
+        </div>
+      )}
 
       <div style={{ fontFamily:COND, fontSize:"clamp(10px,1.2vw,16px)", fontWeight:700, letterSpacing:"0.3em",
         color: D("rgba(255,255,255,0.2)","rgba(255,255,255,0.7)") }}>
@@ -162,9 +170,15 @@ export default function TvPage() {
   const { theme, themeId, setThemeId, cycleTheme } = useTheme();
 
   const [showSelector, setShowSelector] = useState(false);
+  // Per-screen display preference — not game state, so it lives in localStorage
+  const [showShot, setShowShot] = useState(() => {
+    try { return localStorage.getItem("tvShowShotClock") !== "0"; } catch { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem("tvShowShotClock", showShot ? "1" : "0"); } catch {} }, [showShot]);
   useEffect(() => {
     const h = e => {
       if (e.key === "c" || e.key === "C") setShowSelector(v=>!v);
+      else if (e.key === "s" || e.key === "S") setShowShot(v=>!v);
       else if (e.key === "d" || e.key === "D") cycleTheme();
     };
     window.addEventListener("keydown", h);
@@ -211,7 +225,7 @@ export default function TvPage() {
       }}>
         <span style={{ fontFamily:COND, fontSize:12, fontWeight:800, letterSpacing:"0.4em",
           color: theme.highContrast ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)" }}>
-          3×3 BASKETBALL · WIN@21 · SHOT 12s
+          3×3 BASKETBALL · WIN@21{showShot ? " · SHOT 12s" : ""}
         </span>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
           <div style={{ display:"flex", alignItems:"center", gap:6,
@@ -221,6 +235,14 @@ export default function TvPage() {
               background: connected ? "#00E87A" : "#FF5050",
               animation: connected && state.isRunning ? "pulse-slow 1.5s infinite" : "none" }}/>
             {connected ? (state.isRunning ? "LIVE" : "READY") : "OFFLINE"}
+          </div>
+          <div onClick={() => setShowShot(v=>!v)} style={{ cursor:"pointer",
+            fontFamily:COND, fontSize:11, fontWeight:800, padding:"3px 10px", borderRadius:8,
+            letterSpacing:"0.1em",
+            background: showShot ? "rgba(255,255,255,0.1)" : "transparent",
+            border:`1px solid ${showShot ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)"}`,
+            color: showShot ? "#FFF" : "rgba(255,255,255,0.4)" }}>
+            SHOT CLOCK {showShot ? "ON" : "OFF"} <span style={{ opacity:.6, fontSize:9 }}>[S]</span>
           </div>
           <ThemeSwitcher themeId={themeId} setThemeId={setThemeId} />
           <div onClick={() => setShowSelector(v=>!v)} style={{ cursor:"pointer",
@@ -258,7 +280,7 @@ export default function TvPage() {
         {/* Score + clock row */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", maxWidth:1400, gap:"clamp(10px,2vw,24px)" }}>
           <ScoreBox team={state.teamA} theme={theme} />
-          <CenterClock state={state} courtId={courtId} divConfig={divConfig} theme={theme} />
+          <CenterClock state={state} courtId={courtId} divConfig={divConfig} theme={theme} showShot={showShot} />
           <ScoreBox team={state.teamB} theme={theme} />
         </div>
 
