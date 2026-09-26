@@ -602,7 +602,7 @@ function cleanTeams(list) {
     return {
       id: t.id, name, short: str(t.short, 6).toUpperCase(), color: isColor(t.color) ? t.color : "#FF6B35",
       logo: /^https?:\/\//.test(logo) ? logo : "",
-      roster: (Array.isArray(t.roster) ? t.roster : []).slice(0, 20).map(p => ({ no: str(p?.no, 3), name: str(p?.name, 40) })).filter(p => p.name),
+      roster: (Array.isArray(t.roster) ? t.roster : []).slice(0, 20).map(p => ({ no: str(p?.no, 3), name: str(p?.name, 40), pts: Math.max(0, Math.min(9999, toInt(p?.pts))) })).filter(p => p.name),
     };
   });
 }
