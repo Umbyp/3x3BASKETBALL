@@ -89,6 +89,13 @@ export default function HomePage() {
                 </button>
              </Card>
 
+             <Card title="Tournament Admin" color="#FBBF24" icon="🗂️" description="Divisions, teams & group draw">
+                <button onClick={() => go("/tournament", { division: DIVISIONS[0].id, admin: 1 })}
+                  className="w-full mt-4 py-4 rounded-xl text-sm font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500 hover:text-black transition-all duration-300">
+                  จัดการรุ่น / ทีม / แบ่งสาย
+                </button>
+             </Card>
+
              <Card title="Public Results" color="#60A5FA" icon="🏆">
                 <div className="grid grid-cols-1 gap-2">
                   {DIVISIONS.map(d => (
