@@ -11,7 +11,7 @@ import { ref, onValue } from "firebase/database";
 import socket, { SERVER_URL } from "../socket.js";
 import { COURTS } from "../constants.js";
 import { useDivisions, findDivision } from "../divisions.js";
-import { isV2, resolvedGames } from "../lib/tournament.js";
+import { normalizeTournament, resolvedGames } from "../lib/tournament.js";
 import { C, BC, TH, big, input, Btn } from "../components/admin/theme.jsx";
 import DivisionsScreen, { divisionSummary } from "../components/admin/DivisionsScreen.jsx";
 import TeamsScreen from "../components/admin/TeamsScreen.jsx";
@@ -63,7 +63,7 @@ export default function AdminPage() {
   const allData = useAllTournaments(divisions.map(d => d.id));
   const courtStates = useCourtStates();
   const raw = allData[divId];
-  const data = isV2(raw) ? raw : null;
+  const data = useMemo(() => normalizeTournament(raw), [raw]);
   const games = useMemo(() => resolvedGames(data).filter(g => !g.bye)
     .sort((a, b) => (a.time || "~").localeCompare(b.time || "~") || (a.court || "").localeCompare(b.court || ""))
     .map((g, i) => ({ ...g, num: `#${i + 1}` })), [data]);

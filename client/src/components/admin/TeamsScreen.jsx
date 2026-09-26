@@ -107,7 +107,7 @@ const SmallBtn = ({ wide, children, ...p }) => (
 );
 
 function TeamEditor({ team, isNew, onClose, onSave, onDelete }) {
-  const [t, setT] = useState(() => ({ ...team, roster: team.roster.map(p => ({ pts: 0, ...p })) }));
+  const [t, setT] = useState(() => ({ short: "", logo: "", ...team, roster: (team.roster || []).map(p => ({ pts: 0, no: "", ...p })) }));
   const set = p => setT(x => ({ ...x, ...p }));
   const setP = (k, p) => set({ roster: t.roster.map((x, j) => (j === k ? { ...x, ...p } : x)) });
   const valid = t.name.trim();

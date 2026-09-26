@@ -19,6 +19,22 @@ import { generateKoBracket } from "./bracketGen.js";
 export const newId = prefix => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export const isV2 = data => data?.version === 2;
+
+/**
+ * Firebase drops empty arrays/objects and may return arrays as objects, so a
+ * team without players comes back with no `roster` at all. Restore the full
+ * shape once, right after reading, so every screen can rely on it.
+ */
+export function normalizeTournament(raw) {
+  if (!isV2(raw)) return null;
+  const arr = v => (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean);
+  return {
+    ...raw,
+    teams: arr(raw.teams).map(t => ({ short: "", color: "#FF6A13", logo: "", ...t, roster: arr(t.roster) })),
+    groups: raw.groups ? Object.fromEntries(Object.entries(raw.groups).map(([g, ids]) => [g, arr(ids)])) : null,
+    games: raw.games ? arr(raw.games) : null,
+  };
+}
 export const teamMap = data => Object.fromEntries((data?.teams || []).map(t => [t.id, t]));
 export const gamesOf = data => (Array.isArray(data?.games) ? data.games : Object.values(data?.games || {})).filter(Boolean);
 

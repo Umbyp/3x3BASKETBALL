@@ -10,7 +10,7 @@ import { db } from "../../firebase.js";
 import { ref, onValue } from "firebase/database";
 import socket from "../../socket.js";
 import { useDivisions, findDivision } from "../../divisions.js";
-import { isV2, resolvedGames, sideName, fmtWhen } from "../../lib/tournament.js";
+import { isV2, normalizeTournament, resolvedGames, sideName, fmtWhen } from "../../lib/tournament.js";
 
 function useTournamentData(divId) {
   const [data, setData] = useState(undefined);
@@ -41,7 +41,7 @@ export default function TournamentBridge({ state, send, divisionId, courtId }) {
   }, []);
 
   const data = useTournamentData(div);
-  const games = useMemo(() => (isV2(data) ? resolvedGames(data).filter(g => !g.bye) : []), [data]);
+  const games = useMemo(() => (isV2(data) ? resolvedGames(normalizeTournament(data)).filter(g => !g.bye) : []), [data]);
   const cur = linked && linked.division === div ? games.find(g => g.id === linked.id) : null;
   const divCfg = findDivision(divisions, div);
 
