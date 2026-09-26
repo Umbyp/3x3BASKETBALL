@@ -169,10 +169,13 @@ function CenterDisplay({state,send,doPossession,doJumpBall,displaySize}){
   const poss=(t)=> possession===t ? {bg:state[t].color,color:textOn(state[t].color),border:state[t].color} : {bg:"#171b27",color:"#8a91a6",border:"#2a3042"};
   const hp=poss("teamA"), ap=poss("teamB");
   const sizes = DISPLAY_SIZES[displaySize]||DISPLAY_SIZES.md;
+  // After the final buzzer the shot clock and possession no longer matter —
+  // shrink/hide them so the result line and OVERTIME / NEW GAME fit the panel
+  const compact = gameOver;
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:4,minHeight:0,background:"#0d1018",border:"1px solid #1f2433",
-      borderRadius:20,padding:"12px 18px 14px",flex:1,justifyContent:"center"}}>
+      borderRadius:20,padding:"12px 18px 14px",flex:1,justifyContent:"center",overflow:"hidden"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
         <span style={{width:8,height:8,borderRadius:"50%",background:statusColor}}/>
         <span style={{fontSize:15,letterSpacing:".2em",fontWeight:700,color:statusColor,fontFamily:"'Barlow Condensed',sans-serif"}}>{status}</span>
@@ -181,14 +184,14 @@ function CenterDisplay({state,send,doPossession,doJumpBall,displaySize}){
       {/* Shot clock — primary focus for the operator */}
       <div style={{display:"flex",alignItems:"center",gap:14}}>
         <span style={{fontSize:14,letterSpacing:".24em",color:"#7a8194",fontWeight:600,fontFamily:"'Barlow Condensed',sans-serif"}}>SHOT</span>
-        <div style={{flex:1,textAlign:"center",fontSize:sizes.shot,fontWeight:800,lineHeight:.95,
+        <div style={{flex:1,textAlign:"center",fontSize:compact?sizes.game:sizes.shot,fontWeight:800,lineHeight:.95,
           fontFamily:"'Barlow Condensed',sans-serif",fontVariantNumeric:"tabular-nums",
           color:shotRed?"#ff4d4d":"#f4f5f8"}}>{fmtS(shotClockTenths)}</div>
         <div style={{width:60}}/>
       </div>
-      <div style={{height:6,borderRadius:3,background:"#1a1f2c",overflow:"hidden"}}>
+      {!compact&&<div style={{height:6,borderRadius:3,background:"#1a1f2c",overflow:"hidden"}}>
         <div style={{height:"100%",width:`${Math.min(100,(shotClockTenths/120)*100)}%`,background:shotRed?"#ff4d4d":"#f4f5f8"}}/>
-      </div>
+      </div>}
 
       <div style={{height:1,background:"#1f2433",margin:"6px 0"}}/>
 
@@ -199,20 +202,21 @@ function CenterDisplay({state,send,doPossession,doJumpBall,displaySize}){
           fontFamily:"'Barlow Condensed',sans-serif",fontVariantNumeric:"tabular-nums",color:"#f4f5f8"}}>{fmt(clockTenths)}</div>
         <div style={{width:34}}/>
       </div>
-      {subline&&<div style={{textAlign:"center",fontFamily:"'IBM Plex Sans Thai',sans-serif",fontSize:14,fontWeight:600,color:sublineColor}}>{subline}</div>}
+      {subline&&<div style={{textAlign:"center",fontFamily:"'IBM Plex Sans Thai',sans-serif",fontSize:compact?20:14,fontWeight:700,color:sublineColor,
+        whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{subline}</div>}
 
       {gameOver&&(
-        <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:2}}>
-          <button onClick={()=>send("startOvertime")} style={{padding:"6px 14px",borderRadius:8,
+        <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:6}}>
+          <button onClick={()=>send("startOvertime")} style={{padding:"10px 18px",borderRadius:8,
             background:"rgba(0,232,122,0.12)",border:"1.5px solid rgba(0,232,122,0.4)",color:"#00E87A",
             fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>▶ OVERTIME</button>
-          <button onClick={()=>send("fullReset")} style={{padding:"6px 14px",borderRadius:8,
+          <button onClick={()=>send("fullReset")} style={{padding:"10px 18px",borderRadius:8,
             background:"rgba(255,55,55,0.1)",border:"1.5px solid rgba(255,55,55,0.3)",color:"#FF7070",
             fontFamily:"'Barlow Condensed',sans-serif",fontSize:14,fontWeight:700,cursor:"pointer"}}>↺ NEW GAME</button>
         </div>
       )}
 
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:2}}>
+      {!compact&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:2}}>
         <button onClick={()=>doPossession("teamA")} title="Possession HOME" style={{width:64,height:64,borderRadius:12,
           border:`1px solid ${hp.border}`,background:hp.bg,color:hp.color,fontSize:24,cursor:"pointer"}}>◀</button>
         <button onClick={doJumpBall} style={{display:"flex",alignItems:"center",padding:"0 6px",fontSize:13,
@@ -220,7 +224,7 @@ function CenterDisplay({state,send,doPossession,doJumpBall,displaySize}){
           fontFamily:"'Barlow Condensed',sans-serif"}}>BALL</button>
         <button onClick={()=>doPossession("teamB")} title="Possession AWAY" style={{width:64,height:64,borderRadius:12,
           border:`1px solid ${ap.border}`,background:ap.bg,color:ap.color,fontSize:24,cursor:"pointer"}}>▶</button>
-      </div>
+      </div>}
     </div>
   );
 }
