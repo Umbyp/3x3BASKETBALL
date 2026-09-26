@@ -3,6 +3,8 @@
     ".read": false,
     ".write": false,
 
+    "tournament_divisions": { ".read": true },
+
     "tournament_data": {
       "$division": {
         ".read": true,

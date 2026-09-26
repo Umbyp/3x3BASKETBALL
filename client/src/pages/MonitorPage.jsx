@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { socket } from "../socket.js";
-import { COURTS, DIVISIONS, RULES } from "../constants.js";
+import { COURTS, RULES } from "../constants.js";
+import { useDivisions } from "../divisions.js";
 
 function fmtClock(t){const s=Math.floor(Math.max(0,t)/10);return`${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;}
 
@@ -85,6 +86,7 @@ function CourtCard({cid,s}){
 }
 
 export default function MonitorPage(){
+  const DIVISIONS=useDivisions();
   const [all,setAll]=useState({});
   const [conn,setConn]=useState(false);
   useEffect(()=>{

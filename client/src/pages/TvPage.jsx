@@ -12,7 +12,8 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { COURTS, DIVISIONS } from "../constants.js";
+import { COURTS } from "../constants.js";
+import { useDivisions, findDivision } from "../divisions.js";
 import { useTheme, ThemeSwitcher } from "../theme.jsx";
 import { useGameState } from "./useGameState.js";
 
@@ -179,8 +180,9 @@ export default function TvPage() {
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  const divisionId = searchParams.get("division") || "open";
-  const divConfig  = DIVISIONS.find(d => d.id === divisionId) || DIVISIONS[0];
+  const divisions  = useDivisions();
+  const divisionId = searchParams.get("division") || divisions[0].id;
+  const divConfig  = findDivision(divisions, divisionId);
 
   /* ─── Loading ────────────────────────────────────────────────────────────── */
   if (!state) return (

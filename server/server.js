@@ -28,7 +28,7 @@ import cors       from "cors";
 
 import { db as adminDb, loadCourtState, saveCourtState } from "./firebaseAdmin.js";
 import { checkPassword, issueToken, verifyToken, checkRateLimit } from "./adminAuth.js";
-import { DEFAULT_TEAMS, generateGroupMatches } from "../client/src/constants.js";
+import { DEFAULT_TEAMS, DIVISIONS, generateGroupMatches } from "../client/src/constants.js";
 import { generateKoBracket } from "../client/src/lib/bracketGen.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
@@ -453,14 +453,58 @@ app.post("/admin/login", (req, res) => {
   res.json({ token: issueToken() });
 });
 
+// ── Divisions (รุ่น) ───────────────────────────────────────────────────────────
+// Stored at tournament_divisions as an ordered array; absent = built-in DIVISIONS.
+const DIV_ID_RE = /^[a-z0-9_-]{1,24}$/;
+async function loadDivisions() {
+  const snap = await adminDb.ref("tournament_divisions").get();
+  const v = snap.val();
+  const list = Array.isArray(v) ? v.filter(Boolean) : Object.values(v || {});
+  return list.length ? list : DIVISIONS;
+}
+
+// Replaces the whole list. Divisions dropped from it also lose their
+// tournament_data — the client confirms that with the admin first.
+app.post("/admin/divisions", requireAdmin, async (req, res) => {
+  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
+  const input = req.body?.divisions;
+  if (!Array.isArray(input) || !input.length || input.length > 20) return res.status(400).json({ error: "bad divisions payload" });
+  const seen = new Set(), divisions = [];
+  for (const d of input) {
+    if (!d || !DIV_ID_RE.test(d.id) || seen.has(d.id)) return res.status(400).json({ error: `bad division id "${d?.id}"` });
+    const label = String(d.label || "").trim().slice(0, 24);
+    if (!label) return res.status(400).json({ error: `division "${d.id}" needs a name` });
+    seen.add(d.id);
+    divisions.push({
+      id: d.id, label,
+      color: isColor(d.color) ? d.color : "#FF6B35",
+      icon: String(d.icon || "🏀").slice(0, 4),
+    });
+  }
+  try {
+    const removed = (await loadDivisions()).map(d => d.id).filter(id => !seen.has(id));
+    const updates = { tournament_divisions: divisions };
+    removed.forEach(id => { updates[`tournament_data/${id}`] = null; });
+    await adminDb.ref().update(updates);
+    res.json({ ok: true, removed });
+  } catch (err) {
+    console.error("[!] divisions error:", err.message);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
 app.post("/admin/tournament/:division/ensure-seeded", async (req, res) => {
   if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
   const divId = req.params.division;
   try {
+    // Unauthenticated, so only seed divisions that actually exist
+    if (!(await loadDivisions()).some(d => d.id === divId)) return res.status(404).json({ error: "unknown division" });
     const ref = adminDb.ref(`tournament_data/${divId}`);
     const snap = await ref.get();
     if (!snap.exists()) {
-      const teams = DEFAULT_TEAMS[divId] || DEFAULT_TEAMS.open;
+      // Built-in divisions get the placeholder groups; new ones start empty
+      // (delayMinutes keeps the node from being empty, which RTDB would drop)
+      const teams = DEFAULT_TEAMS[divId] || {};
       await ref.set({
         teams, groupMatches: generateGroupMatches(teams),
         koMatches: generateKoBracket(teams), delayMinutes: 0,
@@ -481,17 +525,36 @@ app.post("/admin/tournament/:division/regenerate", requireAdmin, async (req, res
   for (const [g, ts] of Object.entries(teams)) {
     if (!Array.isArray(ts) || ts.some(t => typeof t !== "string")) return res.status(400).json({ error: `bad team list for group ${g}` });
   }
+  // Optional: the full seeded registration list the groups were drawn from
+  const registered = req.body?.registeredTeams;
+  if (registered !== undefined && (!Array.isArray(registered) || registered.some(t => typeof t !== "string")))
+    return res.status(400).json({ error: "bad registeredTeams" });
   try {
     const ref = adminDb.ref(`tournament_data/${divId}`);
     const snap = await ref.get();
-    const delayMinutes = snap.exists() ? (snap.val().delayMinutes ?? 0) : 0;
+    const prev = snap.exists() ? snap.val() : {};
     await ref.set({
       teams, groupMatches: generateGroupMatches(teams),
-      koMatches: generateKoBracket(teams), delayMinutes,
+      koMatches: generateKoBracket(teams), delayMinutes: prev.delayMinutes ?? 0,
+      registeredTeams: registered ?? prev.registeredTeams ?? null,
     });
     res.json({ ok: true });
   } catch (err) {
     console.error("[!] regenerate error:", err.message);
+    res.status(500).json({ error: "internal error" });
+  }
+});
+
+// Saves the seeded team list without touching groups/matches
+app.post("/admin/tournament/:division/registered", requireAdmin, async (req, res) => {
+  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
+  const list = req.body?.registeredTeams;
+  if (!Array.isArray(list) || list.length > 200 || list.some(t => typeof t !== "string")) return res.status(400).json({ error: "bad registeredTeams" });
+  try {
+    await adminDb.ref(`tournament_data/${req.params.division}/registeredTeams`).set(list.map(t => t.trim().slice(0, 40)).filter(Boolean));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[!] registered error:", err.message);
     res.status(500).json({ error: "internal error" });
   }
 });

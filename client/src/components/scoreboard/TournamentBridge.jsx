@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../../firebase.js";
 import { ref, onValue, update } from "firebase/database";
-import { DIVISIONS } from "../../constants.js";
+import { useDivisions, findDivision } from "../../divisions.js";
 
 export default function TournamentBridge({ state, send, divisionId, courtId }) {
   const [data,    setData]    = useState(null);
@@ -9,7 +9,7 @@ export default function TournamentBridge({ state, send, divisionId, courtId }) {
   const [status,  setStatus]  = useState(null); // "saving"|"saved"|"live"|"error"
   const [open,    setOpen]    = useState(false);
 
-  const divConfig = DIVISIONS.find(d=>d.id===divisionId)||DIVISIONS[0];
+  const divConfig = findDivision(useDivisions(), divisionId);
 
   useEffect(()=>{
     if(!db) return;

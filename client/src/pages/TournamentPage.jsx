@@ -9,7 +9,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { db } from "../firebase.js";
 import { ref, onValue, update } from "firebase/database";
-import { DIVISIONS, GROUP_COLORS, getDivision } from "../constants.js";
+import { GROUP_COLORS } from "../constants.js";
+import { useDivisions, findDivision } from "../divisions.js";
+import { groupLetters, drawGroups, groupsToAssignment } from "../lib/groupDraw.js";
 import { SERVER_URL } from "../socket.js";
 
 // Admin actions (login, bracket regenerate, schedule delay) go through the
@@ -737,77 +739,249 @@ function Bracket({ koMatches, isAdmin, onEdit, onReset }) {
   );
 }
 
-// ── ✅ Manage Teams Tab (admin) — edit teams/groups, then regenerate the bracket ─
-function nextGroupLetter(existing) {
-  for (let i = 0; i < 26; i++) {
-    const letter = String.fromCharCode(65+i);
-    if (!existing.includes(letter)) return letter;
-  }
-  return `G${existing.length+1}`;
-}
+// ── ✅ Manage Teams Tab (admin) — FIBA-style: register teams, then draw groups ─
+let keySeq = 0;
+const mkItem = name => ({ key: `t${++keySeq}`, name });
 
-function ManageTeams({ teams, onRegenerate }) {
-  const [local, setLocal] = useState(() => JSON.parse(JSON.stringify(teams||{})));
-  useEffect(()=>{ setLocal(JSON.parse(JSON.stringify(teams||{}))); }, [teams]);
+const card = "bg-gray-900 border border-gray-800 rounded-2xl p-4";
+const h2   = "font-black text-white tracking-widest text-sm";
+const inputCls = "bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-orange-500";
+const iconBtn  = "px-2.5 rounded-lg bg-gray-800 border border-gray-700 text-xs font-bold disabled:opacity-25";
 
-  const groups = Object.keys(local).sort();
+function DivisionManager({ divisions, currentId, onSave }) {
+  const [open, setOpen]   = useState(false);
+  const [local, setLocal] = useState(divisions);
+  useEffect(() => { setLocal(divisions); }, [divisions]);
 
-  const renameTeam = (g,i,val) => setLocal(prev=>({...prev,[g]:prev[g].map((t,idx)=>idx===i?val:t)}));
-  const removeTeam = (g,i) => setLocal(prev=>({...prev,[g]:prev[g].filter((_,idx)=>idx!==i)}));
-  const addTeam    = g => setLocal(prev=>({...prev,[g]:[...prev[g],""]}));
-  const addGroup   = () => setLocal(prev=>({...prev,[nextGroupLetter(Object.keys(prev))]:[]}));
-  const removeGroup= g => {
-    if (local[g]?.length && !window.confirm(`ลบกลุ่ม ${g} พร้อมทีมทั้งหมดในกลุ่ม?`)) return;
-    setLocal(prev=>{ const n={...prev}; delete n[g]; return n; });
-  };
+  const set  = (i, f, v) => setLocal(p => p.map((d, j) => j === i ? { ...d, [f]: v } : d));
+  const move = (i, dir) => setLocal(p => { const n = [...p]; [n[i], n[i+dir]] = [n[i+dir], n[i]]; return n; });
+  const add  = () => setLocal(p => [...p, { id: `d${Date.now().toString(36)}`, label: "", color: GROUP_PALETTE[p.length % GROUP_PALETTE.length], icon: "🏀" }]);
+  const del  = i => setLocal(p => p.filter((_, j) => j !== i));
 
-  const emptyTeamNames = groups.some(g=>local[g].some(t=>!t.trim()));
-  const tooFewGroups = groups.length < 2;
-  const tooFewTeams = groups.some(g=>local[g].length < 2);
-  const canRegen = !emptyTeamNames && !tooFewGroups && !tooFewTeams;
-
-  const regen = () => {
-    if (!canRegen) return;
-    if (!window.confirm("สร้างสายการแข่งใหม่จะรีเซ็ตผลการแข่งขันทั้งหมดของรุ่นนี้ ยืนยัน?")) return;
-    onRegenerate(local);
+  const removed = divisions.filter(d => !local.some(l => l.id === d.id));
+  const valid = local.length > 0 && local.every(d => d.label.trim());
+  const save = () => {
+    if (!valid) return;
+    if (removed.length && !window.confirm(`ลบรุ่น ${removed.map(d => d.label).join(", ")} พร้อมทีมและผลการแข่งขันทั้งหมดของรุ่นนั้น?`)) return;
+    onSave(local.map(d => ({ ...d, label: d.label.trim() })), removed.some(d => d.id === currentId));
   };
 
   return (
+    <div className={card}>
+      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center justify-between">
+        <span className={h2}>🏷️ รุ่นการแข่งขัน ({divisions.length})</span>
+        <span className="text-xs text-gray-500">{open ? "ซ่อน ▲" : "แก้ไข ▼"}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-2">
+          {local.map((d, i) => (
+            <div key={d.id} className="flex gap-1.5 items-center">
+              <input type="color" value={d.color} onChange={e => set(i, "color", e.target.value)}
+                className="w-9 h-9 shrink-0 rounded-lg bg-transparent border border-gray-700 cursor-pointer"/>
+              <input value={d.icon} onChange={e => set(i, "icon", e.target.value)} maxLength={4}
+                className={`${inputCls} w-12 shrink-0 text-center px-1`}/>
+              <input value={d.label} onChange={e => set(i, "label", e.target.value)} maxLength={24} placeholder="ชื่อรุ่น เช่น U12"
+                className={`${inputCls} flex-1 min-w-0`}/>
+              <button disabled={i === 0} onClick={() => move(i, -1)} className={`${iconBtn} h-9 text-gray-400`}>↑</button>
+              <button disabled={i === local.length - 1} onClick={() => move(i, 1)} className={`${iconBtn} h-9 text-gray-400`}>↓</button>
+              <button disabled={local.length === 1} onClick={() => del(i)} className={`${iconBtn} h-9 text-rose-500`}>✕</button>
+            </div>
+          ))}
+          <button onClick={add} className="w-full py-2 rounded-lg border border-dashed border-gray-700 text-xs text-gray-500 hover:text-gray-300 hover:border-gray-500">+ เพิ่มรุ่น</button>
+          {!valid && <p className="text-xs text-rose-400 text-center">กรอกชื่อรุ่นให้ครบ</p>}
+          <button disabled={!valid} onClick={save}
+            className="w-full py-2.5 rounded-xl bg-white text-black text-xs font-black uppercase tracking-widest disabled:opacity-30">บันทึกรุ่น</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ManageTeams({ data, divCfg, onSaveRegistered, onRegenerate }) {
+  const init = () => {
+    const groups = data?.teams || {};
+    const names = data?.registeredTeams || Object.keys(groups).sort().flatMap(g => groups[g]);
+    const items = names.map(mkItem);
+    const byName = groupsToAssignment(groups);
+    const assign = {};
+    items.forEach(it => { if (byName[it.name]) assign[it.key] = byName[it.name]; });
+    return { items, assign, groupCount: Math.max(2, Object.keys(groups).length) };
+  };
+  const [st, setSt] = useState(init);
+  const [bulk, setBulk] = useState("");
+  const [mode, setMode] = useState("random");
+  const [seedCount, setSeedCount] = useState(null); // null = follow groupCount
+  // Re-sync only when the saved teams change — live score updates must not wipe unsaved edits
+  const savedSig = JSON.stringify([data?.teams ?? null, data?.registeredTeams ?? null]);
+  useEffect(() => { setSt(init()); }, [savedSig]);
+
+  const { items, assign, groupCount } = st;
+  const letters = groupLetters(groupCount);
+  const seeds = Math.min(seedCount ?? groupCount, items.length);
+  const n = items.length;
+  const maxGroups = Math.max(2, Math.min(8, Math.floor(n / 2)));
+
+  const patch = p => setSt(s => ({ ...s, ...p }));
+  const setName = (i, v) => patch({ items: items.map((it, j) => j === i ? { ...it, name: v } : it) });
+  const move = (i, dir) => { const a = [...items]; [a[i], a[i+dir]] = [a[i+dir], a[i]]; patch({ items: a }); };
+  const remove = i => { const a = [...items]; const [gone] = a.splice(i, 1); const as = { ...assign }; delete as[gone.key]; patch({ items: a, assign: as }); };
+  const addOne = () => patch({ items: [...items, mkItem("")] });
+  const addBulk = () => {
+    const names = bulk.split(/\n|,/).map(t => t.trim()).filter(Boolean);
+    if (!names.length) return;
+    patch({ items: [...items.filter(it => it.name.trim()), ...names.map(mkItem)] });
+    setBulk("");
+  };
+  const setGroupCount = g => {
+    const keep = new Set(groupLetters(g));
+    patch({ groupCount: g, assign: Object.fromEntries(Object.entries(assign).filter(([, v]) => keep.has(v))) });
+  };
+  const draw = () => {
+    const drawn = drawGroups(items.map(it => it.key), groupCount, seeds);
+    patch({ assign: groupsToAssignment(drawn) });
+  };
+  const pick = (key, g) => patch({ assign: { ...assign, [key]: assign[key] === g ? undefined : g } });
+
+  // Validation
+  const names = items.map(it => it.name.trim());
+  const emptyName = names.some(t => !t);
+  const dupes = names.filter((t, i) => t && names.indexOf(t) !== i);
+  const listOk = !emptyName && !dupes.length && n >= 4;
+  const groups = Object.fromEntries(letters.map(l => [l, items.filter(it => assign[it.key] === l)]));
+  const unassigned = items.filter(it => !letters.includes(assign[it.key]));
+  const smallGroup = letters.find(l => groups[l].length < 2);
+  const drawOk = listOk && !unassigned.length && !smallGroup;
+  const listErr = n < 4 ? "ต้องมีอย่างน้อย 4 ทีม" : emptyName ? "กรอกชื่อทีมให้ครบทุกช่อง" : dupes.length ? `ชื่อทีมซ้ำ: ${[...new Set(dupes)].join(", ")}` : null;
+  const drawErr = listErr || (unassigned.length ? `ยังไม่ได้จัดสาย ${unassigned.length} ทีม` : smallGroup ? `สาย ${smallGroup} ต้องมีอย่างน้อย 2 ทีม` : null);
+
+  const confirmDraw = () => {
+    if (!drawOk) return;
+    if (!window.confirm(`สร้างตารางแข่งรุ่น ${divCfg.label} ใหม่จะรีเซ็ตผลการแข่งขันทั้งหมดของรุ่นนี้ ยืนยัน?`)) return;
+    const teams = Object.fromEntries(letters.map(l => [l, groups[l].map(it => it.name.trim())]));
+    onRegenerate(teams, names);
+  };
+  const seedNo = key => { const i = items.findIndex(it => it.key === key); return i < seeds ? i + 1 : null; };
+  const SeedBadge = ({ k }) => { const s = seedNo(k); return s ? <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">★{s}</span> : null; };
+
+  return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 px-4 py-3 text-xs text-yellow-400">
-        ⚠️ แก้ทีม/กลุ่มที่นี่ แล้วกด "สร้างสายการแข่งใหม่" ด้านล่าง — การสร้างใหม่จะรีเซ็ตผลการแข่งขันทั้งหมดของรุ่นนี้ (ตารางเวลา/สนามของแมทช์ใหม่จะยังไม่กำหนดไว้)
+      {/* Step 1 — registration */}
+      <div className={card}>
+        <div className="flex items-center justify-between mb-1">
+          <span className={h2}>1 · รายชื่อทีม <span style={{ color: divCfg.color }}>{divCfg.label}</span></span>
+          <span className="text-xs text-gray-500">{n} ทีม</span>
+        </div>
+        <p className="text-[11px] text-gray-500 mb-3">เรียงตามอันดับความแข็ง (บนสุด = ทีมวางอันดับ 1) — ใช้ ↑↓ จัดลำดับ</p>
+        <div className="space-y-1.5">
+          {items.map((it, i) => (
+            <div key={it.key} className="flex gap-1.5 items-center">
+              <span className={`w-7 text-center text-xs font-black shrink-0 ${i < seeds && mode === "random" ? "text-yellow-400" : "text-gray-600"}`}>{i + 1}</span>
+              <input value={it.name} onChange={e => setName(i, e.target.value.toUpperCase())} maxLength={24} placeholder="ชื่อทีม"
+                className={`${inputCls} flex-1 min-w-0 ${dupes.includes(it.name.trim()) ? "border-rose-500" : ""}`}/>
+              <button disabled={i === 0} onClick={() => move(i, -1)} className={`${iconBtn} h-9 text-gray-400`}>↑</button>
+              <button disabled={i === n - 1} onClick={() => move(i, 1)} className={`${iconBtn} h-9 text-gray-400`}>↓</button>
+              <button onClick={() => remove(i)} className={`${iconBtn} h-9 text-rose-500`}>✕</button>
+            </div>
+          ))}
+        </div>
+        <button onClick={addOne} className="mt-2 w-full py-2 rounded-lg border border-dashed border-gray-700 text-xs text-gray-500 hover:text-gray-300 hover:border-gray-500">+ เพิ่มทีม</button>
+        <textarea value={bulk} onChange={e => setBulk(e.target.value.toUpperCase())} rows={3}
+          placeholder={"หรือวางหลายทีมพร้อมกัน (บรรทัดละทีม)\nTEAM ONE\nTEAM TWO"}
+          className={`${inputCls} w-full mt-3 resize-y`}/>
+        {bulk.trim() && <button onClick={addBulk} className="mt-1.5 w-full py-2 rounded-lg bg-gray-800 border border-gray-700 text-xs font-bold text-gray-300">+ เพิ่มรายชื่อที่วาง</button>}
+        {listErr && <p className="mt-2 text-xs text-rose-400 text-center">{listErr}</p>}
+        <button disabled={emptyName || !!dupes.length} onClick={() => onSaveRegistered(names)}
+          className="mt-3 w-full py-2.5 rounded-xl bg-white text-black text-xs font-black uppercase tracking-widest disabled:opacity-30">บันทึกรายชื่อ</button>
       </div>
 
-      {groups.map(g => (
-        <div key={g} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <span className="font-black text-white tracking-widest">Group {g}</span>
-            <button onClick={()=>removeGroup(g)} className="text-[10px] text-rose-500 font-bold hover:text-rose-400">ลบกลุ่มนี้</button>
+      {/* Step 2 — draw */}
+      <div className={card}>
+        <span className={h2}>2 · แบ่งสาย</span>
+        <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <span className="text-xs text-gray-400">จำนวนสาย</span>
+          {Array.from({ length: maxGroups - 1 }, (_, i) => i + 2).map(g => (
+            <button key={g} onClick={() => setGroupCount(g)}
+              className={`w-9 h-9 rounded-lg text-sm font-black border ${g === groupCount ? "bg-orange-500/15 border-orange-500 text-orange-400" : "bg-gray-800 border-gray-700 text-gray-400"}`}>{g}</button>
+          ))}
+          {n >= 4 && <span className="text-[11px] text-gray-500">≈ {Math.floor(n / groupCount)}{n % groupCount ? `–${Math.ceil(n / groupCount)}` : ""} ทีม/สาย</span>}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          {[["random", "🎲 สุ่ม (มีทีมวาง)"], ["manual", "✋ เลือกเอง"]].map(([v, l]) => (
+            <button key={v} onClick={() => setMode(v)}
+              className={`py-2.5 rounded-xl text-xs font-black border ${mode === v ? "bg-orange-500/15 border-orange-500 text-orange-400" : "bg-gray-800 border-gray-700 text-gray-400"}`}>{l}</button>
+          ))}
+        </div>
+
+        {mode === "random" ? (
+          <div className="mt-3 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">จำนวนทีมวาง</span>
+              <button onClick={() => setSeedCount(Math.max(0, seeds - 1))} className={`${iconBtn} h-8 text-gray-300`}>−</button>
+              <span className="w-8 text-center font-black text-yellow-400">{seeds}</span>
+              <button onClick={() => setSeedCount(Math.min(n, seeds + 1))} className={`${iconBtn} h-8 text-gray-300`}>+</button>
+            </div>
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+              ทีมวาง (อันดับ 1–{seeds || "–"} ในรายชื่อ) กระจายแบบงู A→{letters[letters.length - 1]} แล้วย้อนกลับ ทีมที่เหลือสุ่มลงช่องที่เหลือ
+              — ทีมวาง {Math.min(seeds, groupCount)} อันดับแรกจะไม่อยู่สายเดียวกัน
+            </p>
+            <button disabled={!listOk} onClick={draw}
+              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-black tracking-widest disabled:opacity-30">
+              🎲 {unassigned.length === n ? "สุ่มแบ่งสาย" : "สุ่มใหม่"}
+            </button>
           </div>
-          <div className="space-y-2">
-            {local[g].map((t,i)=>(
-              <div key={i} className="flex gap-2">
-                <input value={t} onChange={e=>renameTeam(g,i,e.target.value)} placeholder="ชื่อทีม"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-orange-500"/>
-                <button onClick={()=>removeTeam(g,i)} className="px-3 rounded-lg bg-gray-800 border border-gray-700 text-rose-500 text-xs font-bold hover:border-rose-500/50">✕</button>
+        ) : (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[11px] text-gray-500 mb-2">กดตัวอักษรสายให้แต่ละทีม (กดซ้ำเพื่อยกเลิก)</p>
+            {items.map(it => (
+              <div key={it.key} className="flex items-center gap-2">
+                <span className="flex-1 min-w-0 truncate text-xs font-bold text-white">{it.name || <span className="text-gray-600">(ไม่มีชื่อ)</span>}</span>
+                <div className="flex gap-1 shrink-0">
+                  {letters.map((l, gi) => (
+                    <button key={l} onClick={() => pick(it.key, l)}
+                      className="w-8 h-8 rounded-lg text-xs font-black border"
+                      style={assign[it.key] === l
+                        ? { background: GROUP_PALETTE[gi], borderColor: GROUP_PALETTE[gi], color: "#000" }
+                        : { background: "rgb(31,41,55)", borderColor: "rgb(55,65,81)", color: "rgb(156,163,175)" }}>{l}</button>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
-          <button onClick={()=>addTeam(g)} className="mt-2 w-full py-2 rounded-lg border border-dashed border-gray-700 text-xs text-gray-500 hover:text-gray-300 hover:border-gray-500">+ เพิ่มทีม</button>
+        )}
+      </div>
+
+      {/* Step 3 — preview + confirm */}
+      <div className={card}>
+        <span className={h2}>3 · ผลการแบ่งสาย</span>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          {letters.map((l, gi) => (
+            <div key={l} className="rounded-xl border border-gray-800 bg-gray-950/60 p-2.5" style={{ borderLeftWidth: 4, borderLeftColor: GROUP_PALETTE[gi] }}>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs font-black tracking-widest" style={{ color: GROUP_PALETTE[gi] }}>Group {l}</span>
+                <span className="text-[10px] text-gray-500">{groups[l].length} ทีม</span>
+              </div>
+              {groups[l].length ? groups[l].map(it => (
+                <div key={it.key} className="flex items-center gap-1.5 py-0.5">
+                  <span className="text-[11px] font-bold text-gray-200 truncate min-w-0">{it.name}</span>
+                  {mode === "random" && <SeedBadge k={it.key}/>}
+                </div>
+              )) : <div className="text-[11px] text-gray-600">—</div>}
+            </div>
+          ))}
         </div>
-      ))}
-
-      <button onClick={addGroup} className="w-full py-3 rounded-xl border border-dashed border-gray-700 text-sm text-gray-400 hover:text-white hover:border-gray-500 font-bold">+ เพิ่มกลุ่ม</button>
-
-      {!canRegen && (
-        <p className="text-xs text-rose-400 text-center">
-          {tooFewGroups?"ต้องมีอย่างน้อย 2 กลุ่มถึงจะสร้างสาย Knockout ได้":tooFewTeams?"แต่ละกลุ่มต้องมีอย่างน้อย 2 ทีม":"กรอกชื่อทีมให้ครบทุกช่อง"}
-        </p>
-      )}
-      <button disabled={!canRegen} onClick={regen}
-        className="w-full py-3.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-30 disabled:hover:bg-orange-600 text-white text-sm font-black uppercase tracking-widest transition-all">
-        🔄 สร้างสายการแข่งใหม่
-      </button>
+        {unassigned.length > 0 && unassigned.length < n && (
+          <p className="mt-2 text-[11px] text-gray-500">ยังไม่มีสาย: {unassigned.map(it => it.name || "(ไม่มีชื่อ)").join(", ")}</p>
+        )}
+        <div className="mt-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 px-3 py-2 text-[11px] text-yellow-400">
+          ⚠️ การยืนยันจะสร้างตารางแข่งรอบแบ่งกลุ่ม + สาย Knockout ใหม่ และรีเซ็ตผลการแข่งขันทั้งหมดของรุ่นนี้
+        </div>
+        {drawErr && <p className="mt-2 text-xs text-rose-400 text-center">{drawErr}</p>}
+        <button disabled={!drawOk} onClick={confirmDraw}
+          className="mt-3 w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white text-sm font-black uppercase tracking-widest">
+          ✅ ยืนยันและสร้างตารางแข่ง
+        </button>
+      </div>
     </div>
   );
 }
@@ -815,8 +989,9 @@ function ManageTeams({ teams, onRegenerate }) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function TournamentPage() {
   const [sp, setSp]        = useSearchParams();
-  const divId              = sp.get("division") || "open";
-  const divCfg             = getDivision(divId);
+  const divisions          = useDivisions();
+  const divId              = sp.get("division") || divisions[0].id;
+  const divCfg             = findDivision(divisions, divId);
   const [tab, setTab]      = useState("standings");
   const [data, setData]    = useState(null);
   const [loading, setLoad] = useState(true);
@@ -831,7 +1006,7 @@ export default function TournamentPage() {
 
   useEffect(() => {
     if (!db) { setLoad(false); return; }
-    setLoad(true);
+    setLoad(true); setData(null);
     const r = ref(db, `tournament_data/${divId}`);
     return onValue(r, snap => {
       const d = snap.val();
@@ -885,13 +1060,24 @@ export default function TournamentPage() {
       else setToast({message:"❌ บันทึกไม่สำเร็จ",type:"error"});
     });
   };
-  const regenerateBracket = newTeams => {
-    fetch(`${SERVER_URL}/admin/tournament/${divId}/regenerate`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
-      body: JSON.stringify({ teams: newTeams }),
-    }).then(res => {
-      if (res.ok) { setToast({message:"🔄 สร้างสายการแข่งใหม่แล้ว",type:"success"}); setTab("standings"); }
+  const adminPost = (path, body) => fetch(`${SERVER_URL}${path}`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify(body),
+  }).then(res => res.ok, () => false);
+  const regenerateBracket = (newTeams, registeredTeams) => {
+    adminPost(`/admin/tournament/${divId}/regenerate`, { teams: newTeams, registeredTeams }).then(ok => {
+      if (ok) { setToast({message:"🔄 สร้างสายการแข่งใหม่แล้ว",type:"success"}); setTab("standings"); }
       else setToast({message:"❌ สร้างสายการแข่งไม่สำเร็จ",type:"error"});
+    });
+  };
+  const saveRegistered = registeredTeams => {
+    adminPost(`/admin/tournament/${divId}/registered`, { registeredTeams }).then(ok =>
+      setToast(ok ? {message:"✅ บันทึกรายชื่อแล้ว",type:"success"} : {message:"❌ บันทึกไม่สำเร็จ",type:"error"}));
+  };
+  const saveDivisions = (list, currentRemoved) => {
+    adminPost(`/admin/divisions`, { divisions: list }).then(ok => {
+      setToast(ok ? {message:"✅ บันทึกรุ่นแล้ว",type:"success"} : {message:"❌ บันทึกรุ่นไม่สำเร็จ",type:"error"});
+      if (ok && currentRemoved) setSp({ division: list[0].id });
     });
   };
   const logout = () => { setAdmin(false); setAdminToken(null); if (tab==="teams") setTab("standings"); };
@@ -936,7 +1122,7 @@ export default function TournamentPage() {
           </span>
         </h1>
         <div className="flex gap-2 justify-center flex-wrap mt-3">
-          {DIVISIONS.map(d=>(
+          {divisions.map(d=>(
             <button key={d.id} onClick={()=>{setSp({division:d.id});setTab("standings");}}
               className="px-3 py-1.5 rounded-full text-xs font-bold border transition-all"
               style={{borderColor:d.id===divId?d.color+"55":"rgba(255,255,255,0.1)",color:d.id===divId?d.color:"rgba(255,255,255,0.3)",background:d.id===divId?d.color+"18":"transparent"}}>
@@ -987,7 +1173,12 @@ export default function TournamentPage() {
         <AnimatedTab active={tab==="standings"}><Standings standings={standings} divCfg={divCfg}/></AnimatedTab>
         <AnimatedTab active={tab==="schedule"}><Schedule matches={allMatches} isAdmin={isAdmin} onEdit={setModal} onReset={resetScore} now={now} delayMinutes={delayMinutes}/></AnimatedTab>
         <AnimatedTab active={tab==="bracket"}><Bracket koMatches={resolvedKo} isAdmin={isAdmin} onEdit={setModal} onReset={resetScore}/></AnimatedTab>
-        {isAdmin && <AnimatedTab active={tab==="teams"}><ManageTeams teams={data.teams} onRegenerate={regenerateBracket}/></AnimatedTab>}
+        {isAdmin && <AnimatedTab active={tab==="teams"}>
+          <div className="space-y-4">
+            <DivisionManager divisions={divisions} currentId={divId} onSave={saveDivisions}/>
+            <ManageTeams key={divId} data={data} divCfg={divCfg} onSaveRegistered={saveRegistered} onRegenerate={regenerateBracket}/>
+          </div>
+        </AnimatedTab>}
       </main>
 
       <footer className="text-center py-10">
