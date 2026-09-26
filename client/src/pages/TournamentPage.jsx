@@ -12,6 +12,7 @@ import { ref, onValue, update } from "firebase/database";
 import { GROUP_COLORS } from "../constants.js";
 import { useDivisions, findDivision } from "../divisions.js";
 import { groupLetters, drawGroups, groupsToAssignment } from "../lib/groupDraw.js";
+import { calcStandings, resolveKo } from "../lib/standings.js";
 import { SERVER_URL } from "../socket.js";
 
 // Admin actions (login, bracket regenerate, schedule delay) go through the
@@ -105,77 +106,6 @@ function getAdjustedTimeLabel(matchId, delayMinutes = 0) {
   };
   const [st, en] = s.time.split("-");
   return `${addMin(st, delayMinutes)}-${addMin(en, delayMinutes)}`;
-}
-
-// ── H2H Tiebreaker 3+ ทีม ────────────────────────────────────────────────────
-function breakTie(tiedTeams, allMatches) {
-  if (tiedTeams.length <= 1) return tiedTeams;
-  const h2h = {}, tiedSet = new Set(tiedTeams.map(t => t.team));
-  tiedTeams.forEach(t => { h2h[t.team] = { pts:0, pf:0, pa:0 }; });
-  allMatches.forEach(m => {
-    if (!m.played || m.round !== 1 || !tiedSet.has(m.home) || !tiedSet.has(m.away)) return;
-    h2h[m.home].pf += m.homeScore; h2h[m.home].pa += m.awayScore;
-    h2h[m.away].pf += m.awayScore; h2h[m.away].pa += m.homeScore;
-    const forfeitH = m.homeScore===0 && m.awayScore===20;
-    const forfeitA = m.awayScore===0 && m.homeScore===20;
-    if      (m.homeScore > m.awayScore) { h2h[m.home].pts+=3; h2h[m.away].pts+=forfeitH?0:1; }
-    else if (m.awayScore > m.homeScore) { h2h[m.away].pts+=3; h2h[m.home].pts+=forfeitA?0:1; }
-  });
-  return [...tiedTeams].sort((a, b) => {
-    const ha = h2h[a.team], hb = h2h[b.team];
-    if (hb.pts !== ha.pts) return hb.pts - ha.pts;
-    const dA = ha.pf-ha.pa, dB = hb.pf-hb.pa;
-    if (dA !== dB) return dB - dA;
-    return (b.pf-b.pa) - (a.pf-a.pa);
-  });
-}
-
-function calcStandings(teams, matches) {
-  if (!teams || !matches) return {};
-  const stats = {};
-  Object.entries(teams).forEach(([g, ts]) => ts.forEach(t => {
-    stats[t] = { team:t, group:g, played:0, wins:0, losses:0, pts:0, pf:0, pa:0 };
-  }));
-  matches.forEach(m => {
-    if (!m.played || m.round !== 1) return;
-    const h = stats[m.home], a = stats[m.away]; if (!h||!a) return;
-    h.played++; a.played++; h.pf+=m.homeScore; h.pa+=m.awayScore;
-    a.pf+=m.awayScore; a.pa+=m.homeScore;
-    const forfeitH = m.homeScore===0 && m.awayScore===20;
-    const forfeitA = m.awayScore===0 && m.homeScore===20;
-    if      (m.homeScore > m.awayScore) { h.wins++; h.pts+=3; a.losses++; a.pts+=forfeitH?0:1; }
-    else if (m.awayScore > m.homeScore) { a.wins++; a.pts+=3; h.losses++; h.pts+=forfeitA?0:1; }
-  });
-  const grouped = {};
-  Object.keys(teams).forEach(g => {
-    const sorted = [...teams[g].map(t=>stats[t])].sort((a,b)=>b.pts-a.pts);
-    const result = []; let i = 0;
-    while (i < sorted.length) {
-      let j = i+1;
-      while (j < sorted.length && sorted[j].pts === sorted[i].pts) j++;
-      result.push(...breakTie(sorted.slice(i,j), matches));
-      i = j;
-    }
-    grouped[g] = result;
-  });
-  return grouped;
-}
-
-function resolveKo(code, standings, resolved) {
-  if (!code) return code;
-  const rankMatch = /^([12])(.+)$/.exec(code);
-  if (rankMatch) {
-    const r = parseInt(rankMatch[1])-1, g = rankMatch[2];
-    return standings[g]?.[r]?.team || code;
-  }
-  if (code.includes("-")) {
-    const [outcome, label] = code.split("-");
-    const m = resolved.find(r => r.shortLabel === label);
-    if (!m || !m.played) return code;
-    const hw = m.homeScore > m.awayScore;
-    return outcome==="W" ? (hw?m.rh:m.ra) : (hw?m.ra:m.rh);
-  }
-  return code;
 }
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
