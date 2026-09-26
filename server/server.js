@@ -28,8 +28,8 @@ import cors       from "cors";
 
 import { db as adminDb, loadCourtState, saveCourtState } from "./firebaseAdmin.js";
 import { checkPassword, issueToken, verifyToken, checkRateLimit } from "./adminAuth.js";
-import { DEFAULT_TEAMS, DIVISIONS, generateGroupMatches } from "../client/src/constants.js";
-import { generateKoBracket } from "../client/src/lib/bracketGen.js";
+import { DIVISIONS } from "../client/src/constants.js";
+import { resolvedGames, gamesOf } from "../client/src/lib/tournament.js";
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 const PORT      = parseInt(process.env.PORT || "3001", 10);
@@ -72,7 +72,7 @@ function mkState(courtId) {
     possession: null, jumpBall: false,
     gameOver: false, winner: null, isOvertime: false,
     showShotClock: true, // display setting for TV/overlay — not part of undo snapshots
-    linkedMatch: null,   // { division, id, label } — tournament match this court is scoring
+    linkedMatch: null,   // { division, id, label, final } — tournament game this court is scoring
   };
 }
 
@@ -377,13 +377,15 @@ function handleAction(cid, { type, team, value }) {
       case "jumpBall":      s.jumpBall = !s.jumpBall; s.possession = null; break;
       case "teamName":      if (!isTeam(team)) throw new Error(`bad team`); s[team].name = String(value||"").slice(0,24).toUpperCase().trim()||"TEAM"; break;
       case "shotClockVisible": s.showShotClock = value === true; break;
-      case "linkMatch": {
-        if (value == null) { s.linkedMatch = null; break; }
-        const id = toInt(value.id), division = String(value.division || "").slice(0, 24);
-        if (!division || !id) throw new Error("bad linkMatch");
-        s.linkedMatch = { division, id, label: String(value.label || "").slice(0, 40) };
+      case "finishGame":
+        if (!s.linkedMatch || s.linkedMatch.final) return;
+        s.linkedMatch = { ...s.linkedMatch, final: true };
+        syncLinkedGame(cid, "final");
         break;
-      }
+      case "unlinkGame":
+        if (s.linkedMatch && !s.linkedMatch.final) syncLinkedGame(cid, "scheduled");
+        s.linkedMatch = null;
+        break;
       case "teamColor":     if (!isTeam(team)||!isColor(value)) throw new Error(`bad color`); s[team].color = value; break;
       case "startOvertime": stopGame(cid,s); stopShot(cid,s); s.gameOver=false; s.winner=null; s.isOvertime=true; s.clockTenths=OT_DEFAULT; s.shotClockTenths=SHOT_DEFAULT; break;
       case "resetGame": {
@@ -413,8 +415,58 @@ function handleAction(cid, { type, team, value }) {
       default:              console.warn(`[?] unknown action "${type}"`); return;
     }
   } catch (err) { console.error(`[!] action error court=${cid} type=${type}:`, err.message); return; }
+  if (SCORE_ACTIONS.has(type)) queueGameSync(cid);
   dirty[cid] = true;
   scheduleSave(cid);
+}
+
+// ── Tournament game link ───────────────────────────────────────────────────────
+// A court scores at most one tournament game (s.linkedMatch). The tournament
+// is the single source of team data: loading a game pulls names/colours from
+// tournament_data, and score changes are written back by this server (Admin
+// SDK), so clients never write tournament data directly.
+const SCORE_ACTIONS = new Set(["score","scoreCorrect","undo","removeHistory","resetGame"]);
+const gameSyncTimers = {};
+
+async function writeGame(division, gameId, fields) {
+  const snap = await adminDb.ref(`tournament_data/${division}/games`).get();
+  const idx = gamesOf({ games: snap.val() }).findIndex(g => g.id === gameId);
+  if (idx === -1) throw new Error(`game ${gameId} not found`);
+  const key = Array.isArray(snap.val()) ? idx : Object.keys(snap.val())[idx];
+  await adminDb.ref(`tournament_data/${division}/games/${key}`).update(fields);
+}
+
+function syncLinkedGame(cid, status = "live") {
+  const s = states[cid], link = s?.linkedMatch;
+  if (!adminDb || !link) return;
+  writeGame(link.division, link.id, { homeScore: s.teamA.score, awayScore: s.teamB.score, status, court: cid })
+    .catch(err => console.error(`[!] game sync court=${cid}:`, err.message));
+}
+function queueGameSync(cid) {
+  if (!states[cid]?.linkedMatch || states[cid].linkedMatch.final) return;
+  clearTimeout(gameSyncTimers[cid]);
+  gameSyncTimers[cid] = setTimeout(() => syncLinkedGame(cid, "live"), 700);
+}
+
+async function loadGame(cid, value) {
+  if (!adminDb) throw new Error("tournament not configured");
+  const division = String(value?.division || ""), gameId = String(value?.gameId || "");
+  const snap = await adminDb.ref(`tournament_data/${division}`).get();
+  const g = resolvedGames(snap.val()).find(x => x.id === gameId);
+  if (!g) throw new Error(`game ${gameId} not found`);
+  if (!g.homeTeam || !g.awayTeam) throw new Error(`game ${gameId} teams not decided yet`);
+  const div = (await loadDivisions()).find(d => d.id === division);
+  const s = states[cid];
+  stopGame(cid, s); stopShot(cid, s);
+  const f = mkState(cid);
+  f.showShotClock = s.showShotClock;
+  f.teamA.name = g.homeTeam.name.toUpperCase().slice(0, 24); f.teamA.color = isColor(g.homeTeam.color) ? g.homeTeam.color : f.teamA.color;
+  f.teamB.name = g.awayTeam.name.toUpperCase().slice(0, 24); f.teamB.color = isColor(g.awayTeam.color) ? g.awayTeam.color : f.teamB.color;
+  if (g.status === "final") { f.teamA.score = g.homeScore ?? 0; f.teamB.score = g.awayScore ?? 0; }
+  f.linkedMatch = { division, id: gameId, label: `${div?.label || division} · ${g.label}`, final: g.status === "final" };
+  states[cid] = f; gcMeta[cid] = null; scMeta[cid] = null; history[cid] = [];
+  if (g.status !== "final") await writeGame(division, gameId, { status: "live", court: cid, homeScore: 0, awayScore: 0 });
+  broadcast(cid); dirty[cid] = true; scheduleSave(cid);
 }
 
 // ── Socket events ──────────────────────────────────────────────────────────────
@@ -434,6 +486,13 @@ io.on("connection", socket => {
     if (!payload||typeof payload!=="object"||Array.isArray(payload)) return;
     const cid = String(payload.courtId||"").trim().toUpperCase();
     if (!states[cid]) { console.warn(`[?] bad courtId "${payload.courtId}"`); return; }
+    if (payload.type === "loadGame") {
+      loadGame(cid, payload.value).catch(err => {
+        console.error(`[!] loadGame court=${cid}:`, err.message);
+        socket.emit("actionError", { type: "loadGame", message: err.message });
+      });
+      return;
+    }
     handleAction(cid, payload);
   });
 
@@ -501,83 +560,96 @@ app.post("/admin/divisions", requireAdmin, async (req, res) => {
   }
 });
 
-app.post("/admin/tournament/:division/ensure-seeded", async (req, res) => {
+// ── Tournament v2 (see client/src/lib/tournament.js for the shape) ─────────────
+const str = (v, max) => String(v ?? "").trim().slice(0, max);
+const ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const TIME_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})?$/;
+const intOrNull = v => (v === null || v === undefined || v === "" ? null : Math.max(0, Math.min(999, toInt(v))));
+const STATUSES = new Set(["scheduled", "live", "final"]);
+
+function cleanTeams(list) {
+  if (!Array.isArray(list) || list.length > 64) throw new Error("bad teams");
+  const seen = new Set();
+  return list.map(t => {
+    if (!t || !ID_RE.test(t.id) || seen.has(t.id)) throw new Error(`bad team id "${t?.id}"`);
+    const name = str(t.name, 40); if (!name) throw new Error("team needs a name");
+    seen.add(t.id);
+    const logo = str(t.logo, 500);
+    return {
+      id: t.id, name, short: str(t.short, 6).toUpperCase(), color: isColor(t.color) ? t.color : "#FF6B35",
+      logo: /^https?:\/\//.test(logo) ? logo : "",
+      roster: (Array.isArray(t.roster) ? t.roster : []).slice(0, 20).map(p => ({ no: str(p?.no, 3), name: str(p?.name, 40) })).filter(p => p.name),
+    };
+  });
+}
+function cleanGroups(groups, teamIds) {
+  if (!groups || typeof groups !== "object" || Array.isArray(groups)) throw new Error("bad groups");
+  const out = {};
+  for (const [g, ids] of Object.entries(groups)) {
+    if (!/^[A-H]$/.test(g) || !Array.isArray(ids)) throw new Error(`bad group ${g}`);
+    out[g] = ids.filter(id => teamIds.has(id));
+  }
+  return out;
+}
+function cleanGames(list) {
+  if (!Array.isArray(list) || list.length > 400) throw new Error("bad games");
+  return list.map(g => {
+    if (!g || !ID_RE.test(g.id) || !["group", "ko"].includes(g.kind)) throw new Error(`bad game "${g?.id}"`);
+    const time = str(g.time, 16); if (!TIME_RE.test(time)) throw new Error(`bad time for ${g.id}`);
+    return {
+      id: g.id, kind: g.kind, ...(g.kind === "group" ? { group: str(g.group, 1) } : { stage: str(g.stage, 8) }),
+      round: toInt(g.round), label: str(g.label, 40), home: str(g.home, 32), away: g.away == null ? null : str(g.away, 32),
+      court: str(g.court, 4), time, homeScore: intOrNull(g.homeScore), awayScore: intOrNull(g.awayScore),
+      status: STATUSES.has(g.status) ? g.status : "scheduled", ...(g.bye ? { bye: true } : {}),
+    };
+  });
+}
+function cleanSchedule(v) {
+  if (!v || typeof v !== "object") throw new Error("bad schedule");
+  return {
+    date: /^\d{4}-\d{2}-\d{2}$/.test(v.date) ? v.date : "", start: /^\d{2}:\d{2}$/.test(v.start) ? v.start : "09:00",
+    slotMinutes: Math.max(5, Math.min(240, toInt(v.slotMinutes) || 20)),
+    courts: (Array.isArray(v.courts) ? v.courts : []).slice(0, 8).map(c => str(c, 4)).filter(Boolean),
+  };
+}
+
+// Partial save: any of teams / groups / games / schedule; the rest is kept.
+app.post("/admin/tournament/:division/save", requireAdmin, async (req, res) => {
   if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
   const divId = req.params.division;
   try {
-    // Unauthenticated, so only seed divisions that actually exist
     if (!(await loadDivisions()).some(d => d.id === divId)) return res.status(404).json({ error: "unknown division" });
     const ref = adminDb.ref(`tournament_data/${divId}`);
-    const snap = await ref.get();
-    if (!snap.exists()) {
-      // Built-in divisions get the placeholder groups; new ones start empty
-      // (delayMinutes keeps the node from being empty, which RTDB would drop)
-      const teams = DEFAULT_TEAMS[divId] || {};
-      await ref.set({
-        teams, groupMatches: generateGroupMatches(teams),
-        koMatches: generateKoBracket(teams), delayMinutes: 0,
-      });
-    }
+    const prev = (await ref.get()).val();
+    const base = prev?.version === 2 ? prev : {};
+    const b = req.body || {};
+    const teams = b.teams !== undefined ? cleanTeams(b.teams) : (base.teams || []);
+    const next = {
+      version: 2, teams,
+      groups: b.groups !== undefined ? cleanGroups(b.groups, new Set(teams.map(t => t.id))) : (base.groups || null),
+      games: b.games !== undefined ? cleanGames(b.games) : (base.games || null),
+      schedule: b.schedule !== undefined ? cleanSchedule(b.schedule) : (base.schedule || null),
+    };
+    await ref.set(next);
     res.json({ ok: true });
   } catch (err) {
-    console.error("[!] ensure-seeded error:", err.message);
-    res.status(500).json({ error: "internal error" });
+    const bad = /^bad |needs a name/.test(err.message);
+    if (!bad) console.error("[!] tournament save error:", err.message);
+    res.status(bad ? 400 : 500).json({ error: bad ? err.message : "internal error" });
   }
 });
 
-app.post("/admin/tournament/:division/regenerate", requireAdmin, async (req, res) => {
+// Admin result entry / correction for one game
+app.post("/admin/tournament/:division/game/:gameId", requireAdmin, async (req, res) => {
   if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
-  const divId = req.params.division;
-  const teams = req.body?.teams;
-  if (!teams || typeof teams !== "object" || Array.isArray(teams)) return res.status(400).json({ error: "bad teams payload" });
-  for (const [g, ts] of Object.entries(teams)) {
-    if (!Array.isArray(ts) || ts.some(t => typeof t !== "string")) return res.status(400).json({ error: `bad team list for group ${g}` });
-  }
-  // Optional: the full seeded registration list the groups were drawn from
-  const registered = req.body?.registeredTeams;
-  if (registered !== undefined && (!Array.isArray(registered) || registered.some(t => typeof t !== "string")))
-    return res.status(400).json({ error: "bad registeredTeams" });
+  const { homeScore, awayScore, status } = req.body || {};
+  if (!STATUSES.has(status)) return res.status(400).json({ error: "bad status" });
   try {
-    const ref = adminDb.ref(`tournament_data/${divId}`);
-    const snap = await ref.get();
-    const prev = snap.exists() ? snap.val() : {};
-    await ref.set({
-      teams, groupMatches: generateGroupMatches(teams),
-      koMatches: generateKoBracket(teams), delayMinutes: prev.delayMinutes ?? 0,
-      registeredTeams: registered ?? prev.registeredTeams ?? null,
-    });
+    await writeGame(req.params.division, req.params.gameId, { homeScore: intOrNull(homeScore), awayScore: intOrNull(awayScore), status });
     res.json({ ok: true });
   } catch (err) {
-    console.error("[!] regenerate error:", err.message);
-    res.status(500).json({ error: "internal error" });
-  }
-});
-
-// Saves the seeded team list without touching groups/matches
-app.post("/admin/tournament/:division/registered", requireAdmin, async (req, res) => {
-  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
-  const list = req.body?.registeredTeams;
-  if (!Array.isArray(list) || list.length > 200 || list.some(t => typeof t !== "string")) return res.status(400).json({ error: "bad registeredTeams" });
-  try {
-    await adminDb.ref(`tournament_data/${req.params.division}/registeredTeams`).set(list.map(t => t.trim().slice(0, 40)).filter(Boolean));
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("[!] registered error:", err.message);
-    res.status(500).json({ error: "internal error" });
-  }
-});
-
-app.post("/admin/tournament/:division/delay", requireAdmin, async (req, res) => {
-  if (!adminDb) return res.status(503).json({ error: "tournament sync not configured" });
-  const divId = req.params.division;
-  const minutes = parseInt(req.body?.minutes, 10);
-  if (isNaN(minutes) || minutes < 0) return res.status(400).json({ error: "bad minutes" });
-  try {
-    await adminDb.ref(`tournament_data/${divId}/delayMinutes`).set(minutes);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("[!] delay error:", err.message);
-    res.status(500).json({ error: "internal error" });
+    console.error("[!] game result error:", err.message);
+    res.status(/not found/.test(err.message) ? 404 : 500).json({ error: err.message });
   }
 });
 
