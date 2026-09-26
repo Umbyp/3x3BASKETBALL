@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import { db } from "../firebase.js";
 import { ref, onValue } from "firebase/database";
 import { useDivisions, findDivision } from "../divisions.js";
-import { isV2, resolvedGames } from "../lib/tournament.js";
+import { normalizeTournament, resolvedGames } from "../lib/tournament.js";
 import { StandingsView, GamesView, BracketView, TeamsView } from "../components/tournament/PublicViews.jsx";
 
 export default function TournamentPage() {
@@ -28,7 +28,7 @@ export default function TournamentPage() {
   }, [divId]);
 
   // Old (pre-v2) data is ignored — the admin sets the division up again
-  const data  = isV2(raw) ? raw : null;
+  const data  = useMemo(() => normalizeTournament(raw), [raw]);
   const games = useMemo(() => resolvedGames(data), [data]);
   const real  = games.filter(g => !g.bye);
   const done  = real.filter(g => g.status === "final").length;
