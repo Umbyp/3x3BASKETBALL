@@ -56,3 +56,20 @@ export function groupsToAssignment(groups) {
   Object.entries(groups || {}).forEach(([g, ts]) => (ts || []).forEach(t => { a[t] = g; }));
   return a;
 }
+
+/**
+ * Pot draw (FIBA): teams are split into pots of `groupCount` by seed —
+ * pot 1 = seeds 1..G, pot 2 = next G, … — and each pot is drawn at random,
+ * one team per group, so two teams from the same pot never share a group.
+ * Later pots fill the smallest groups first when the last pot is short.
+ */
+export function drawPots(teams, groupCount, rng = Math.random) {
+  const letters = groupLetters(groupCount);
+  const out = Object.fromEntries(letters.map(l => [l, []]));
+  for (let p = 0; p * groupCount < teams.length; p++) {
+    const pot = shuffle(teams.slice(p * groupCount, (p + 1) * groupCount), rng);
+    const targets = shuffle(letters, rng).sort((a, b) => out[a].length - out[b].length);
+    pot.forEach((t, i) => out[targets[i]].push(t));
+  }
+  return out;
+}
