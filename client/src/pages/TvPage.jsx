@@ -115,7 +115,7 @@ function CenterClock({ state, courtId, divConfig, theme, showShot }) {
   const gameEnd    = clockTenths === 0;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"clamp(4px,1vh,10px)", width:"clamp(180px,30vw,420px)", flexShrink:0 }}>
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"clamp(4px,1vh,10px)", width:"clamp(200px,36vw,660px)", flexShrink:0 }}>
       <div style={{ fontFamily:COND, fontSize:"clamp(11px,1.4vw,18px)", fontWeight:800, letterSpacing:"0.4em",
         color: D("rgba(255,255,255,0.3)","rgba(255,255,255,0.85)"), textAlign:"center" }}>
         สนาม {courtId} · {divConfig.label.toUpperCase()}
@@ -130,16 +130,16 @@ function CenterClock({ state, courtId, divConfig, theme, showShot }) {
 
       {/* Game clock — the running match time */}
       <div style={{ fontFamily:BEBAS, lineHeight:1,
-        // Without the shot clock, the game clock takes over the big slot
-        fontSize: showShot ? "clamp(40px,min(7vw,9vh),92px)" : "clamp(72px,min(13vw,20vh),220px)",
+        // Game clock is the headline number; it grows further when the shot clock is hidden
+        fontSize: showShot ? "clamp(64px,min(12vw,18vh),210px)" : "clamp(80px,min(17vw,30vh),320px)",
         color: gameEnd ? "#FF3333" : isRunning ? "#FFF" : D("rgba(255,255,255,0.75)","rgba(255,255,255,0.95)"),
         textShadow: gameEnd ? "0 0 40px rgba(255,30,30,0.7)" : "none" }}>
         {fmtClock(clockTenths)}
       </div>
 
-      {/* Shot clock — the big broadcast-style number */}
+      {/* Shot clock — secondary, below the game clock */}
       {showShot && (
-        <div style={{ fontFamily:BEBAS, fontSize:"clamp(72px,min(13vw,16vh),170px)", lineHeight:0.9, fontWeight:900, color:shotColor }}>
+        <div style={{ fontFamily:BEBAS, fontSize:"clamp(48px,min(8vw,12vh),140px)", lineHeight:0.9, fontWeight:900, color:shotColor }}>
           {fmtShot(shotClockTenths)}
         </div>
       )}
