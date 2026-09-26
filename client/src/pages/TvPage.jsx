@@ -8,6 +8,7 @@
  * - ไม่มีปุ่ม operator
  * - Theme [D]: เลือกธีมให้เหมาะกับสถานการณ์ (มืด/แดดจ้า/อารีน่า/พลบค่ำ)
  * - Shot clock: operator เปิด/ปิดการแสดงได้จากหน้า Scoreboard (Settings)
+ * - ขนาด [-] [+] [0]: ย่อ/ขยายทุกอย่างบนจอ 60–150% (จำค่าไว้ในเครื่องนี้)
  */
 
 import { useState, useEffect } from "react";
@@ -171,10 +172,19 @@ export default function TvPage() {
   const { theme, themeId, setThemeId, cycleTheme } = useTheme();
 
   const [showSelector, setShowSelector] = useState(false);
+  // Per-screen display size (TVs differ) — a local preference, so localStorage
+  const [scale, setScale] = useState(() => {
+    try { const v = parseFloat(localStorage.getItem("tvScale")); return v >= 0.6 && v <= 1.5 ? v : 1; } catch { return 1; }
+  });
+  const bump = d => setScale(v => Math.round(Math.min(1.5, Math.max(0.6, v + d)) * 100) / 100);
+  useEffect(() => { try { localStorage.setItem("tvScale", String(scale)); } catch {} }, [scale]);
   useEffect(() => {
     const h = e => {
       if (e.key === "c" || e.key === "C") setShowSelector(v=>!v);
       else if (e.key === "d" || e.key === "D") cycleTheme();
+      else if (e.key === "+" || e.key === "=") bump(0.05);
+      else if (e.key === "-" || e.key === "_") bump(-0.05);
+      else if (e.key === "0") setScale(1);
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -233,6 +243,14 @@ export default function TvPage() {
               animation: connected && state.isRunning ? "pulse-slow 1.5s infinite" : "none" }}/>
             {connected ? (state.isRunning ? "LIVE" : "READY") : "OFFLINE"}
           </div>
+          <div style={{ display:"flex", alignItems:"center", gap:4, fontFamily:COND, fontSize:11, fontWeight:800,
+            color: theme.highContrast ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)", letterSpacing:"0.1em" }}>
+            {[["−", () => bump(-0.05)], [`${Math.round(scale * 100)}%`, () => setScale(1)], ["+", () => bump(0.05)]].map(([l, f]) => (
+              <button key={l.length > 1 ? "pct" : l} onClick={f} title={l.length > 1 ? "รีเซ็ตเป็น 100% [0]" : l === "+" ? "ขยาย [+]" : "ย่อ [-]"}
+                style={{ minWidth: l.length > 1 ? 42 : 22, height:22, borderRadius:6, cursor:"pointer", font:"inherit", color:"inherit",
+                  background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.12)" }}>{l}</button>
+            ))}
+          </div>
           <ThemeSwitcher themeId={themeId} setThemeId={setThemeId} />
           <div onClick={() => setShowSelector(v=>!v)} style={{ cursor:"pointer",
             fontFamily:COND, fontSize:10, color: theme.highContrast ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.15)",
@@ -244,7 +262,8 @@ export default function TvPage() {
 
       {/* Main scoreboard */}
       <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-        justifyContent:"center", gap:"clamp(12px,3vh,36px)", padding:"0 clamp(12px,4vw,60px)", minHeight:0, overflow:"hidden" }}>
+        justifyContent:"center", padding:"0 clamp(12px,4vw,60px)", minHeight:0, overflow:"hidden" }}>
+      <div style={{ zoom: scale, width:`${100 / scale}%`, display:"flex", flexDirection:"column", alignItems:"center", gap:"clamp(12px,3vh,36px)" }}>
 
         {winTeam && (
           <div style={{ padding:"10px 26px", background:"rgba(255,215,0,0.1)",
@@ -278,6 +297,14 @@ export default function TvPage() {
           <FoulsBox team={state.teamA} theme={theme} />
           <FoulsBox team={state.teamB} theme={theme} />
         </div>
+      </div>
+      </div>
+
+      {/* Credit — bottom centre, same size as #3X3BASKETBALL */}
+      <div style={{ flexShrink:0, textAlign:"center", padding:"6px 0 8px", zoom: scale, fontFamily:COND,
+        fontSize:"clamp(10px,1.2vw,16px)", fontWeight:700, letterSpacing:"0.3em",
+        color: theme.highContrast ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)" }}>
+        MADE BY ENABLEBRAIN
       </div>
 
       {/* Bottom accent — thin team-color identifiers only */}
