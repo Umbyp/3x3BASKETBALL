@@ -86,16 +86,16 @@ function FoulsBox({ team, theme }) {
   const bonus = team.teamFouls >= 6;
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
-      <span style={{ fontFamily:COND, fontSize:20, fontWeight:800, letterSpacing:"0.35em",
+      <span style={{ fontFamily:COND, fontSize:"clamp(16px,1.5vw,30px)", fontWeight:800, letterSpacing:"0.35em",
         color: bonus ? "#FF3333" : D("rgba(255,255,255,0.45)","rgba(255,255,255,0.85)") }}>
         FOULS{bonus ? " · BONUS" : ""}
       </span>
       <div style={{
-        width:"clamp(70px,10vw,120px)", height:"clamp(55px,9vh,95px)", display:"flex", alignItems:"center", justifyContent:"center",
+        width:"clamp(90px,13vw,170px)", height:"clamp(70px,12vh,135px)", display:"flex", alignItems:"center", justifyContent:"center",
         border:`clamp(2.5px,0.3vw,4px) solid ${bonus ? "#FF3333" : D("rgba(255,255,255,0.55)","rgba(255,255,255,0.85)")}`,
         borderRadius:16, background:"rgba(0,0,0,0.3)",
       }}>
-        <span style={{ fontFamily:BEBAS, fontSize:"clamp(28px,min(5vw,7vh),66px)", color: bonus ? "#FF3333" : "#FFF" }}>
+        <span style={{ fontFamily:BEBAS, fontSize:"clamp(40px,min(7vw,10vh),100px)", color: bonus ? "#FF3333" : "#FFF" }}>
           {team.teamFouls}
         </span>
       </div>

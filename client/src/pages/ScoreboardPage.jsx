@@ -82,6 +82,8 @@ function TeamPanel({team,tKey,send,state,align}){
   const isPoss = state.possession===tKey;
   const bonus = team.teamFouls>=RULES.BONUS_FOULS;
   const save=()=>{send("teamName",tKey,input.toUpperCase());setEditing(false);};
+  // Long names shrink, then truncate with "…" so they never push past the header
+  const nameFs = team.name.length<=12?26:team.name.length<=18?21:18;
 
   return(
     <div data-screen-label={tKey==="teamA"?"Home":"Away"} style={{display:"flex",flexDirection:"column",minHeight:0,
@@ -90,18 +92,19 @@ function TeamPanel({team,tKey,send,state,align}){
         background:team.color,color:txt,flexDirection:flip?"row-reverse":"row"}}>
         <ColorDot color={team.color} onPick={c=>send("teamColor",tKey,c)} align={flip?"right":"left"}/>
         {editing
-          ?<input autoFocus value={input} maxLength={20} onChange={e=>setInput(e.target.value.toUpperCase())}
+          ?<input autoFocus value={input} maxLength={24} onChange={e=>setInput(e.target.value.toUpperCase())}
               onBlur={save} onKeyDown={e=>e.key==="Enter"&&save()}
               style={{background:"none",border:"none",borderBottom:`2px solid ${txt}`,outline:"none",color:txt,
                 fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:26,letterSpacing:".08em",
-                width:140,textAlign:flip?"right":"left"}}/>
-          :<span onClick={()=>setEditing(true)} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,
-              fontSize:26,letterSpacing:".08em",cursor:"pointer",flex:flip?"none":1}}>{team.name}</span>
+                flex:"1 1 0",minWidth:0,textAlign:flip?"right":"left"}}/>
+          :<span onClick={()=>setEditing(true)} title={team.name} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,
+              fontSize:nameFs,letterSpacing:".06em",cursor:"pointer",flex:"0 1 auto",minWidth:0,
+              whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{team.name}</span>
         }
-        {isWin&&<span style={{padding:"2px 8px",borderRadius:5,background:txt,color:team.color,fontSize:14,
+        {isWin&&<span style={{flex:"none",padding:"2px 8px",borderRadius:5,background:txt,color:team.color,fontSize:14,
           fontWeight:800,letterSpacing:".1em"}}>WIN</span>}
-        <div style={{flex:1}}/>
-        {isPoss&&<span style={{fontSize:20,fontWeight:800}}>{flip?"BALL ●":"● BALL"}</span>}
+        <div style={{flex:1,minWidth:0}}/>
+        {isPoss&&<span style={{flex:"none",whiteSpace:"nowrap",fontSize:20,fontWeight:800}}>{flip?"BALL ●":"● BALL"}</span>}
       </div>
       <div className="score-value" style={{flex:1,minHeight:0,display:"flex",alignItems:"center",justifyContent:"center",
         fontSize:"clamp(90px,20vh,230px)",fontWeight:800,lineHeight:.8,color:team.color,
