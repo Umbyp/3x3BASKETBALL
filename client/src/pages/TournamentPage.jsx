@@ -997,7 +997,9 @@ export default function TournamentPage() {
   const [loading, setLoad] = useState(true);
   const [isAdmin, setAdmin]= useState(false);
   const [adminToken, setAdminToken] = useState(null);
-  const [showLogin, setLogin] = useState(false);
+  // ?admin=1 (from the Home page's Tournament Admin card) opens the login right away
+  const fromAdminLink = sp.get("admin") === "1";
+  const [showLogin, setLogin] = useState(fromAdminLink);
   const [loginPw, setPw]   = useState("");
   const [loginErr, setLoginErr] = useState(false);
   const [modal, setModal]  = useState(null);
@@ -1079,6 +1081,13 @@ export default function TournamentPage() {
       setToast(ok ? {message:"✅ บันทึกรุ่นแล้ว",type:"success"} : {message:"❌ บันทึกรุ่นไม่สำเร็จ",type:"error"});
       if (ok && currentRemoved) setSp({ division: list[0].id });
     });
+  };
+  const doLogin = async () => {
+    const t = await adminLogin(loginPw);
+    setPw("");
+    if (!t) { setLoginErr(true); return; }
+    setAdminToken(t); setAdmin(true); setLogin(false);
+    if (fromAdminLink) setTab("teams");
   };
   const logout = () => { setAdmin(false); setAdminToken(null); if (tab==="teams") setTab("standings"); };
 
@@ -1194,11 +1203,11 @@ export default function TournamentPage() {
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-72 animate-fade-in" onClick={e=>e.stopPropagation()}>
             <h3 className="text-xl font-black text-white tracking-widest text-center mb-4">ADMIN</h3>
             <input type="password" value={loginPw} onChange={e=>{setPw(e.target.value);setLoginErr(false);}}
-              onKeyDown={async e=>{if(e.key==="Enter"){const t=await adminLogin(loginPw);if(t){setAdminToken(t);setAdmin(true);setLogin(false);setPw("");}else{setPw("");setLoginErr(true);}}}}
+              onKeyDown={e=>{if(e.key==="Enter") doLogin();}}
               autoFocus placeholder="Password"
               className="w-full bg-black/50 border border-gray-700 rounded-lg px-4 py-2.5 text-center text-white outline-none focus:border-orange-500 transition-colors mb-3"/>
             {loginErr && <p className="text-rose-400 text-[11px] text-center mb-3">รหัสผ่านไม่ถูกต้อง หรือเชื่อมต่อเซิร์ฟเวอร์ไม่ได้</p>}
-            <button onClick={async()=>{const t=await adminLogin(loginPw);if(t){setAdminToken(t);setAdmin(true);setLogin(false);setPw("");}else{setPw("");setLoginErr(true);}}}
+            <button onClick={doLogin}
               className="w-full py-2.5 rounded-xl bg-white text-black font-black text-sm uppercase tracking-widest hover:bg-gray-200 transition-colors">Login</button>
           </div>
         </div>
