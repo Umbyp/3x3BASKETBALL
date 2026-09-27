@@ -119,6 +119,25 @@ export function scheduleGames(games, { date, start, slotMinutes, courts }) {
   return out;
 }
 
+/**
+ * Scheduling clashes: two games on the same court at the same time, or a
+ * team booked into two games at once (manual time edits can cause both).
+ * @returns {Record<string,string[]>} gameId → ["court"|"team", …]
+ */
+export function findConflicts(games) {
+  const out = {};
+  const add = (id, why) => { (out[id] ??= []).includes(why) || out[id].push(why); };
+  const timed = games.filter(g => g.time && !g.bye);
+  for (let i = 0; i < timed.length; i++) for (let j = i + 1; j < timed.length; j++) {
+    const a = timed[i], b = timed[j];
+    if (a.time !== b.time) continue;
+    if (a.court && a.court === b.court) { add(a.id, "court"); add(b.id, "court"); }
+    const ta = [a.home, a.away].filter(Boolean), tb = [b.home, b.away].filter(Boolean);
+    if (ta.some(t => tb.includes(t))) { add(a.id, "team"); add(b.id, "team"); }
+  }
+  return out;
+}
+
 // ── Standings (FIBA 3x3) ───────────────────────────────────────────────────────
 // 1) wins  2) head-to-head when exactly two teams are tied  3) average points
 // scored per game  4) seed. Forfeit losses score 0 for the team that forfeited.

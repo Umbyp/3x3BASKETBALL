@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { COURTS } from "../../constants.js";
-import { scheduleGames, gamesOf, slotLabel } from "../../lib/tournament.js";
+import { scheduleGames, gamesOf, slotLabel, findConflicts } from "../../lib/tournament.js";
 import { C, BC, card, label, big, input, Btn, Modal, Empty, Code } from "./theme.jsx";
 
 export const stageLabel = g => g.kind === "group" ? `Pool ${g.group} · กลุ่ม ${g.group}`
@@ -48,6 +48,8 @@ export default function ScheduleScreen({ data, games, divId, courtStates, save, 
   const byDay = {};
   times.forEach(t => { const d = t === "—" ? "ยังไม่กำหนดเวลา · Unscheduled" : t.slice(0, 10); (byDay[d] ??= []).push(t); });
   const multiDay = Object.keys(byDay).length > 1;
+  const clash = findConflicts(games);
+  const clashCount = Object.keys(clash).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -60,6 +62,14 @@ export default function ScheduleScreen({ data, games, divId, courtStates, save, 
         <Btn kind={unscheduled ? "primary" : "ghost"} onClick={() => setShowCfg(v => !v)} style={{ marginLeft: "auto" }}>⚡ Auto schedule · จัดเวลาอัตโนมัติ</Btn>
       </div>
 
+      {clashCount > 0 && (
+        <div style={{ borderRadius: 14, padding: "14px 18px", background: "rgba(255,59,48,.12)", border: `1px solid ${C.red}`, color: "#ffb4ae", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={big(24, { color: C.red, textTransform: "uppercase" })}>⚠ {clashCount} games clash</span>
+          <span style={{ fontSize: 14, flex: "1 1 320px" }}>มี {clashCount} เกมที่เวลาชนกัน (สนามเดียวกันเวลาเดียวกัน หรือทีมเดียวกันแข่ง 2 เกมพร้อมกัน) — แก้ด้วยปุ่ม ✎ ที่การ์ดสีแดง หรือกด Auto schedule เพื่อจัดใหม่ทั้งหมด (ผลการแข่งไม่หาย)</span>
+          <Btn kind="danger" onClick={() => setShowCfg(true)}>⚡ Re-schedule · จัดใหม่</Btn>
+        </div>
+      )}
+
       {(showCfg || unscheduled) && <AutoSchedule data={data} raw={raw} save={save} onDone={() => setShowCfg(false)}/>}
 
       <div className="adm-sched-head" style={{ display: "grid", gridTemplateColumns: `72px repeat(${cols.length},minmax(0,1fr))`, gap: 10, ...label, padding: "0 2px" }}>
@@ -70,14 +80,19 @@ export default function ScheduleScreen({ data, games, divId, courtStates, save, 
           {(multiDay || day.startsWith("ยัง")) && <span style={{ ...label, color: C.orange }}>{day}</span>}
           {ts.map(t => {
             const row = shown.filter(g => (g.time || "—") === t);
+            // every game gets shown: games on an unknown court are spread over the columns
             const extra = row.filter(g => !cols.includes(g.court));
+            const cellOf = (c, ci) => [...row.filter(x => x.court === c), ...extra.filter((_, k) => k % cols.length === ci)];
             return (
               <div key={t} className="adm-sched-row" style={{ display: "grid", gridTemplateColumns: `72px repeat(${cols.length},minmax(0,1fr))`, gap: 10, alignItems: "stretch" }}>
                 <div style={big(26, { paddingTop: 10 })}>{t === "—" ? "—" : t.slice(11)}</div>
                 {cols.map((c, ci) => {
-                  const g = row.find(x => x.court === c) || (ci < extra.length ? extra[ci] : null);
-                  return g ? <GameCard key={c} g={g} vm={gameVM(g, courtStates, divId)} onLoad={() => loadToCourt(g)} onEdit={() => setEdit(g)}/>
-                    : <div key={c} className="adm-empty-cell" style={{ border: `1px dashed ${C.line2}`, borderRadius: 14, minHeight: 60 }}/>;
+                  const cell = cellOf(c, ci);
+                  return cell.length ? (
+                    <div key={c} style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+                      {cell.map(g => <GameCard key={g.id} g={g} vm={gameVM(g, courtStates, divId)} clash={clash[g.id]} onLoad={() => loadToCourt(g)} onEdit={() => setEdit(g)}/>)}
+                    </div>
+                  ) : <div key={c} className="adm-empty-cell" style={{ border: `1px dashed ${C.line2}`, borderRadius: 14, minHeight: 60 }}/>;
                 })}
               </div>
             );
@@ -86,22 +101,28 @@ export default function ScheduleScreen({ data, games, divId, courtStates, save, 
       ))}
 
       {edit && <GameEditor g={edit} onClose={() => setEdit(null)}
-        onSaveSlot={async (time, court) => { if (await save({ games: raw.map(x => (x.id === edit.id ? { ...x, time, court } : x)) })) setEdit(null); }}
+        onSaveSlot={async (time, court) => {
+          const next = raw.map(x => (x.id === edit.id ? { ...x, time, court } : x));
+          const c = findConflicts(next)[edit.id];
+          if (c && !window.confirm(`⚠️ เวลานี้ชนกับเกมอื่น (${c.map(w => (w === "court" ? `สนาม ${court} มีเกมอยู่แล้ว` : "มีทีมที่ต้องแข่ง 2 เกมพร้อมกัน")).join(" · ")})\nบันทึกต่อไหม?`)) return;
+          if (await save({ games: next })) setEdit(null);
+        }}
         onSaveResult={async (h, a, st) => { if (await saveResult(edit.id, h, a, st)) setEdit(null); }}/>}
     </div>
   );
 }
 
-export function GameCard({ g, vm, onLoad, onEdit, compact }) {
+export function GameCard({ g, vm, onLoad, onEdit, compact, clash }) {
   const primary = vm.ready && !vm.final && !vm.loadedOn;
   const lab = vm.final ? "Final" : vm.loadedOn ? `On scoreboard · Court ${vm.loadedOn} →` : vm.ready ? "Load to Scoreboard" : "Waiting for teams";
   return (
-    <div style={{ flex: compact ? "none" : 1, minWidth: 0, ...card, borderRadius: 14, border: `1px solid ${vm.live ? C.red : C.line2}`, padding: compact ? 0 : "12px 14px", display: "flex", flexDirection: "column", gap: compact ? 0 : 8, overflow: "hidden" }}>
+    <div style={{ flex: compact ? "none" : 1, minWidth: 0, ...card, borderRadius: 14, border: `${clash ? 2 : 1}px solid ${vm.live || clash ? C.red : C.line2}`, padding: compact ? 0 : "12px 14px", display: "flex", flexDirection: "column", gap: compact ? 0 : 8, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, ...(compact ? { padding: "6px 10px", background: C.inner2 } : {}) }}>
         <span style={{ fontSize: compact ? 11 : 12, color: C.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           <b style={{ color: C.text }}>{g.num}</b> · {compact ? `${g.time ? g.time.slice(11) : "—"} · C${g.court || "?"}` : stageLabel(g)}
         </span>
         <span style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+          {clash && <span title={clash.includes("team") ? "ทีมแข่ง 2 เกมพร้อมกัน" : "สนามเดียวกันเวลาเดียวกัน"} style={{ fontSize: 11, fontWeight: 800, padding: "4px 8px", borderRadius: 999, background: C.red, color: "#fff" }}>⚠ ชนกัน</span>}
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", padding: "4px 9px", borderRadius: 999, border: `1px solid ${vm.pill[2]}`, background: vm.pill[0], color: vm.pill[1] }}>{vm.status}</span>
           {onEdit && <button onClick={onEdit} title="แก้เวลา/สนาม/ผล" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${C.line3}`, background: "transparent", color: C.muted }}>✎</button>}
         </span>
